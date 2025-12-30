@@ -927,8 +927,14 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
   };
 
   // Refine standalone objection-proof output with word count and/or custom instructions
+  // Uses the most recent refined output if available, otherwise the original bulletproof output
   const handleRefineObjectionProof = async () => {
-    if (!objectionProofOutput.trim()) {
+    // Use refined output if it exists, otherwise use original bulletproof output
+    const sourceText = objectionProofRefinedOutput?.trim() 
+      ? objectionProofRefinedOutput 
+      : objectionProofOutput;
+    
+    if (!sourceText.trim()) {
       toast({ title: "No objection-proof text to refine", variant: "destructive" });
       return;
     }
@@ -939,7 +945,7 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: objectionProofOutput,
+          text: sourceText,
           targetWordCount: objectionProofRefineWordCount ? parseInt(objectionProofRefineWordCount) : null,
           customInstructions: objectionProofRefineInstructions || null,
         }),
@@ -5338,10 +5344,18 @@ Generated on: ${new Date().toLocaleString()}`;
                 <div className="mt-6 bg-gradient-to-r from-purple-50 to-fuchsia-50 dark:from-purple-900/20 dark:to-fuchsia-900/20 p-6 rounded-lg border-2 border-purple-300 dark:border-purple-700">
                   <h4 className="text-lg font-semibold text-purple-900 dark:text-purple-100 mb-4 flex items-center gap-2">
                     <FileEdit className="w-5 h-5 text-purple-600" />
-                    Refine Objection-Proof Version
+                    Refine {objectionProofRefinedOutput ? "Refined" : "Objection-Proof"} Version
+                    {objectionProofRefinedOutput && (
+                      <Badge variant="outline" className="ml-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                        Iterative Mode
+                      </Badge>
+                    )}
                   </h4>
                   <p className="text-sm text-purple-700 dark:text-purple-300 mb-4">
-                    Adjust word count and/or add custom instructions to modify the output above. The refined version will appear in a new box below.
+                    {objectionProofRefinedOutput 
+                      ? "Refining the current refined version. Each refinement builds on the previous one. Use the trash button below to reset and start fresh from the original."
+                      : "Adjust word count and/or add custom instructions to modify the output above. The refined version will appear in a new box below."
+                    }
                   </p>
                   
                   <div className="flex flex-wrap gap-4 items-end mb-4">
