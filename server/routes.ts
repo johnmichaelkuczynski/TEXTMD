@@ -4,6 +4,8 @@ import multer from "multer";
 import { storage } from "./storage";
 import path from "path";
 import OpenAI from "openai";
+import { storeAndReturnOutput } from "./outputLimiter";
+import { v4 as uuidv4 } from 'uuid';
 // GPT Bypass Humanizer imports
 import { fileProcessorService } from "./services/fileProcessor";
 import { textChunkerService } from "./services/textChunker";
@@ -877,6 +879,12 @@ export async function registerRoutes(app: Express): Promise<Express> {
         });
       }
 
+      // Check if user is logged in AND has Pro subscription
+      const user = req.user as any;
+      const isPro = user?.isPro === true;
+      const userId = user?.id || null;
+      const sessionId = ensureAnonSession(req, res);
+
       // Validate evaluation type
       const validTypes = ['intelligence', 'originality', 'cogency', 'overall_quality'];
       if (!validTypes.includes(evaluationType)) {
@@ -886,11 +894,30 @@ export async function registerRoutes(app: Express): Promise<Express> {
       }
 
       console.log(`Starting quick ${evaluationType} analysis with ${provider}...`);
+      console.log(`User: ${userId ? 'logged in' : 'anonymous'}, Pro: ${isPro}`);
       
       const { performQuickAnalysis } = await import('./services/quickAnalysis');
       const result = await performQuickAnalysis(text, provider, evaluationType);
       
-      res.json({ success: true, result });
+      // Store output and apply truncation for non-Pro users
+      const resultText = typeof result === 'string' ? result : JSON.stringify(result);
+      const outputResult = await storeAndReturnOutput(
+        resultText,
+        'quick-analysis',
+        isPro,
+        userId,
+        sessionId,
+        { provider, evaluationType }
+      );
+      
+      res.json({ 
+        success: true, 
+        result: isPro ? result : outputResult.content,
+        outputId: outputResult.outputId,
+        isTruncated: outputResult.isTruncated,
+        fullWordCount: outputResult.fullWordCount,
+        previewWordCount: outputResult.previewWordCount
+      });
       
     } catch (error: any) {
       console.error("Quick analysis error:", error);
@@ -947,22 +974,47 @@ export async function registerRoutes(app: Express): Promise<Express> {
         });
       }
 
+      // Check if user is logged in AND has Pro subscription
+      const user = req.user as any;
+      const isPro = user?.isPro === true;
+      const userId = user?.id || null;
+      const sessionId = ensureAnonSession(req, res);
+
       console.log(`Starting intelligent rewrite with ${provider}...`);
       console.log(`Original text length: ${originalText.length} characters`);
       console.log(`Custom instructions: ${customInstructions || 'None'}`);
       console.log(`External knowledge: ${useExternalKnowledge ? 'ENABLED' : 'DISABLED'}`);
+      console.log(`User: ${userId ? 'logged in' : 'anonymous'}, Pro: ${isPro}`);
       
       const { performIntelligentRewrite } = await import('./services/intelligentRewrite');
-      const result = await performIntelligentRewrite({
+      const fullResult = await performIntelligentRewrite({
         text: originalText,
         customInstructions,
         provider,
         useExternalKnowledge
       });
       
+      // Store output and apply truncation for non-Pro users
+      const outputResult = await storeAndReturnOutput(
+        fullResult.rewrittenText || JSON.stringify(fullResult),
+        'intelligent-rewrite',
+        isPro,
+        userId,
+        sessionId,
+        { provider, customInstructions, useExternalKnowledge }
+      );
+      
+      // Return result with potentially truncated text
       res.json({
         success: true,
-        result: result
+        result: {
+          ...fullResult,
+          rewrittenText: outputResult.content
+        },
+        outputId: outputResult.outputId,
+        isTruncated: outputResult.isTruncated,
+        fullWordCount: outputResult.fullWordCount,
+        previewWordCount: outputResult.previewWordCount
       });
       
     } catch (error: any) {
@@ -985,6 +1037,12 @@ export async function registerRoutes(app: Express): Promise<Express> {
         });
       }
 
+      // Check if user is logged in AND has Pro subscription
+      const user = req.user as any;
+      const isPro = user?.isPro === true;
+      const userId = user?.id || null;
+      const sessionId = ensureAnonSession(req, res);
+
       // Validate evaluation type
       const validTypes = ['intelligence', 'originality', 'cogency', 'overall_quality'];
       if (!validTypes.includes(evaluationType)) {
@@ -997,6 +1055,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const { executeFourPhaseProtocol } = await import('./services/fourPhaseProtocol');
 
       console.log(`EXACT 4-PHASE ${evaluationType.toUpperCase()} EVALUATION: Analyzing ${content.length} characters with protocol`);
+      console.log(`User: ${userId ? 'logged in' : 'anonymous'}, Pro: ${isPro}`);
       
       const evaluation = await executeFourPhaseProtocol(
         content, 
@@ -1004,10 +1063,20 @@ export async function registerRoutes(app: Express): Promise<Express> {
         evaluationType as 'intelligence' | 'originality' | 'cogency' | 'overall_quality'
       );
 
+      // Store output and apply truncation for non-Pro users
+      const outputResult = await storeAndReturnOutput(
+        evaluation.formattedReport,
+        'cognitive-evaluate',
+        isPro,
+        userId,
+        sessionId,
+        { provider, evaluationType, overallScore: evaluation.overallScore }
+      );
+
       res.json({
         success: true,
         evaluation: {
-          formattedReport: evaluation.formattedReport,
+          formattedReport: outputResult.content,
           overallScore: evaluation.overallScore,
           provider: evaluation.provider,
           metadata: {
@@ -1015,7 +1084,11 @@ export async function registerRoutes(app: Express): Promise<Express> {
             evaluationType: evaluationType,
             timestamp: new Date().toISOString()
           }
-        }
+        },
+        outputId: outputResult.outputId,
+        isTruncated: outputResult.isTruncated,
+        fullWordCount: outputResult.fullWordCount,
+        previewWordCount: outputResult.previewWordCount
       });
 
     } catch (error: any) {
@@ -2455,10 +2528,18 @@ PROVIDE A FINAL VALIDATED SCORE OUT OF 100 IN THE FORMAT: SCORE: X/100
     try {
       const rewriteRequest: RewriteRequest = req.body;
       
+      // Check if user is logged in AND has Pro subscription
+      const user = req.user as any;
+      const isPro = user?.isPro === true;
+      const userId = user?.id || null;
+      const sessionId = ensureAnonSession(req, res);
+      
       // Validate request
       if (!rewriteRequest.inputText || !rewriteRequest.provider) {
         return res.status(400).json({ message: "Input text and provider are required" });
       }
+
+      console.log(`Rewrite request - User: ${userId ? 'logged in' : 'anonymous'}, Pro: ${isPro}`);
 
       // Analyze input text
       const inputAnalysis = await gptZeroService.analyzeText(rewriteRequest.inputText);
@@ -2495,6 +2576,16 @@ PROVIDE A FINAL VALIDATED SCORE OUT OF 100 IN THE FORMAT: SCORE: X/100
         // Clean markup from rewritten text
         const cleanedRewrittenText = cleanMarkup(rewrittenText);
 
+        // Store output and apply truncation for non-Pro users
+        const outputResult = await storeAndReturnOutput(
+          cleanedRewrittenText,
+          'rewrite',
+          isPro,
+          userId,
+          sessionId,
+          { provider: rewriteRequest.provider, jobId: rewriteJob.id }
+        );
+
         // Update job with results
         await storage.updateRewriteJob(rewriteJob.id, {
           outputText: cleanedRewrittenText,
@@ -2503,13 +2594,19 @@ PROVIDE A FINAL VALIDATED SCORE OUT OF 100 IN THE FORMAT: SCORE: X/100
         });
 
         const response: RewriteResponse = {
-          rewrittenText: cleanedRewrittenText,
+          rewrittenText: outputResult.content,
           inputAiScore: inputAnalysis.aiScore,
           outputAiScore: outputAnalysis.aiScore,
           jobId: rewriteJob.id.toString(),
         };
 
-        res.json(response);
+        res.json({
+          ...response,
+          outputId: outputResult.outputId,
+          isTruncated: outputResult.isTruncated,
+          fullWordCount: outputResult.fullWordCount,
+          previewWordCount: outputResult.previewWordCount
+        });
       } catch (error) {
         // Update job with error status
         await storage.updateRewriteJob(rewriteJob.id, {
