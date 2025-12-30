@@ -276,7 +276,22 @@ export function setupAuth(app: Express) {
       passport.authenticate("google", { 
         failureRedirect: "/?error=google_auth_failed" 
       }),
-      (req, res) => {
+      async (req, res) => {
+        // Link any anonymous session outputs to the newly logged-in user
+        const anonSessionId = req.cookies?.anon_session;
+        const userId = (req.user as any)?.id;
+        
+        if (anonSessionId && userId) {
+          try {
+            await storage.linkSessionOutputsToUser(anonSessionId, userId);
+            // Clear the anonymous session cookie after linking
+            res.clearCookie('anon_session');
+            console.log(`Linked anonymous session ${anonSessionId} to user ${userId}`);
+          } catch (error) {
+            console.error('Failed to link session outputs:', error);
+          }
+        }
+        
         // Successful authentication, redirect to home
         res.redirect("/");
       }
