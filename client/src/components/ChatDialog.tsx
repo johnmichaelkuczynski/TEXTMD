@@ -58,9 +58,12 @@ export const ChatDialog: React.FC<ChatDialogProps> = ({
   const [useExternalKnowledge, setUseExternalKnowledge] = useState<boolean>(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   };
 
   const handleSendToInput = (content: string) => {
@@ -363,7 +366,7 @@ export const ChatDialog: React.FC<ChatDialogProps> = ({
       </CardHeader>
       <CardContent>
         {/* Chat Messages */}
-        <div className="border rounded-lg p-4 h-96 overflow-y-auto bg-gray-50 mb-4">
+        <div ref={messagesContainerRef} className="border rounded-lg p-4 h-96 overflow-y-auto bg-gray-50 mb-4">
           {messages.length === 0 ? (
             <div className="text-center text-gray-500 mt-8">
               <p>Start a conversation with AI about your documents, analysis results, or anything else!</p>
