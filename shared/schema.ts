@@ -10,11 +10,6 @@ export const users = pgTable("users", {
   email: text("email"), // Optional email field
   googleId: text("google_id").unique(), // Google OAuth ID
   profileImageUrl: text("profile_image_url"), // Google profile picture
-  // Stripe subscription fields
-  stripeCustomerId: text("stripe_customer_id"),
-  stripeSubscriptionId: text("stripe_subscription_id"),
-  subscriptionStatus: text("subscription_status"), // active, canceled, past_due, unpaid, etc.
-  isPro: boolean("is_pro").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastActiveAt: timestamp("last_active_at").defaultNow().notNull(),
 });
@@ -324,45 +319,6 @@ export interface RewriteResponse {
   outputAiScore: number;
   jobId: string;
 }
-
-// Credit system tables for Stripe payment integration
-export const userCredits = pgTable("user_credits", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  provider: text("provider").notNull(), // openai, anthropic, perplexity, deepseek
-  credits: integer("credits").notNull().default(0), // word credits for this provider
-  lastUpdated: timestamp("last_updated").defaultNow().notNull(),
-});
-
-export const creditTransactions = pgTable("credit_transactions", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  provider: text("provider").notNull(),
-  amount: integer("amount").notNull(), // dollar amount in cents
-  credits: integer("credits").notNull(), // word credits purchased/used
-  transactionType: text("transaction_type").notNull(), // purchase, deduction
-  stripeSessionId: text("stripe_session_id"),
-  stripePaymentIntentId: text("stripe_payment_intent_id"),
-  status: text("status").notNull().default("pending"), // pending, completed, failed
-  metadata: jsonb("metadata"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const insertUserCreditsSchema = createInsertSchema(userCredits).omit({
-  id: true,
-  lastUpdated: true,
-});
-
-export const insertCreditTransactionSchema = createInsertSchema(creditTransactions).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertUserCredits = z.infer<typeof insertUserCreditsSchema>;
-export type UserCredits = typeof userCredits.$inferSelect;
-
-export type InsertCreditTransaction = z.infer<typeof insertCreditTransactionSchema>;
-export type CreditTransaction = typeof creditTransactions.$inferSelect;
 
 // Cross-chunk coherence system tables
 export const coherenceDocuments = pgTable("coherence_documents", {

@@ -6,8 +6,6 @@ import {
   cognitiveProfiles, 
   intelligentRewrites,
   rewriteJobs,
-  userCredits,
-  creditTransactions,
   type User, 
   type InsertUser, 
   type InsertDocument, 
@@ -15,11 +13,7 @@ import {
   type InsertUserActivity, 
   type InsertCognitiveProfile,
   type InsertRewriteJob,
-  type RewriteJob,
-  type UserCredits,
-  type InsertUserCredits,
-  type CreditTransaction,
-  type InsertCreditTransaction
+  type RewriteJob
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -56,27 +50,6 @@ export interface IStorage {
   getRewriteJob(id: number): Promise<RewriteJob | undefined>;
   updateRewriteJob(id: number, updates: Partial<RewriteJob>): Promise<RewriteJob>;
   listRewriteJobs(): Promise<RewriteJob[]>;
-  
-  // Credit system operations
-  getUserCredits(userId: number, provider: string): Promise<UserCredits | undefined>;
-  getAllUserCredits(userId: number): Promise<UserCredits[]>;
-  initializeUserCredits(userId: number, provider: string): Promise<UserCredits>;
-  updateUserCredits(userId: number, provider: string, credits: number): Promise<UserCredits>;
-  deductCredits(userId: number, provider: string, amount: number): Promise<boolean>;
-  createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction>;
-  getCreditTransaction(id: number): Promise<CreditTransaction | undefined>;
-  getCreditTransactionByStripeSession(sessionId: string): Promise<CreditTransaction | undefined>;
-  updateCreditTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<CreditTransaction>;
-  updateCreditTransactionSessionId(id: number, sessionId: string): Promise<CreditTransaction>;
-  
-  // Subscription operations
-  getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
-  updateUserSubscription(userId: number, data: {
-    stripeCustomerId?: string;
-    stripeSubscriptionId?: string;
-    subscriptionStatus?: string;
-    isPro?: boolean;
-  }): Promise<User>;
 }
 
 const MemoryStore = createMemoryStore(session);
@@ -211,141 +184,6 @@ export class DatabaseStorage implements IStorage {
       .from(rewriteJobs)
       .orderBy(eq(rewriteJobs.createdAt, rewriteJobs.createdAt)) // Simple order by
       .limit(50);
-  }
-  
-  // Credit system implementation
-  async getUserCredits(userId: number, provider: string): Promise<UserCredits | undefined> {
-    const [credits] = await db
-      .select()
-      .from(userCredits)
-      .where(and(eq(userCredits.userId, userId), eq(userCredits.provider, provider)));
-    return credits;
-  }
-
-  async getAllUserCredits(userId: number): Promise<UserCredits[]> {
-    return await db
-      .select()
-      .from(userCredits)
-      .where(eq(userCredits.userId, userId));
-  }
-
-  async initializeUserCredits(userId: number, provider: string): Promise<UserCredits> {
-    const [credits] = await db
-      .insert(userCredits)
-      .values({ userId, provider, credits: 0 })
-      .returning();
-    return credits;
-  }
-
-  async updateUserCredits(userId: number, provider: string, credits: number): Promise<UserCredits> {
-    const existing = await this.getUserCredits(userId, provider);
-    if (!existing) {
-      return this.initializeUserCredits(userId, provider);
-    }
-    
-    const [updated] = await db
-      .update(userCredits)
-      .set({ credits, lastUpdated: new Date() })
-      .where(eq(userCredits.id, existing.id))
-      .returning();
-    return updated;
-  }
-
-  async deductCredits(userId: number, provider: string, amount: number): Promise<boolean> {
-    const existing = await this.getUserCredits(userId, provider);
-    if (!existing || existing.credits < amount) {
-      return false;
-    }
-    
-    await db
-      .update(userCredits)
-      .set({ 
-        credits: existing.credits - amount,
-        lastUpdated: new Date()
-      })
-      .where(eq(userCredits.id, existing.id));
-    
-    return true;
-  }
-
-  async createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction> {
-    const [result] = await db
-      .insert(creditTransactions)
-      .values(transaction)
-      .returning();
-    return result;
-  }
-
-  async getCreditTransaction(id: number): Promise<CreditTransaction | undefined> {
-    const [transaction] = await db
-      .select()
-      .from(creditTransactions)
-      .where(eq(creditTransactions.id, id));
-    return transaction;
-  }
-
-  async getCreditTransactionByStripeSession(sessionId: string): Promise<CreditTransaction | undefined> {
-    const [transaction] = await db
-      .select()
-      .from(creditTransactions)
-      .where(eq(creditTransactions.stripeSessionId, sessionId));
-    return transaction;
-  }
-
-  async updateCreditTransactionStatus(
-    id: number, 
-    status: string, 
-    paymentIntentId?: string
-  ): Promise<CreditTransaction> {
-    const updateData: any = { status };
-    if (paymentIntentId) {
-      updateData.stripePaymentIntentId = paymentIntentId;
-    }
-    
-    const [updated] = await db
-      .update(creditTransactions)
-      .set(updateData)
-      .where(eq(creditTransactions.id, id))
-      .returning();
-    return updated;
-  }
-
-  async updateCreditTransactionSessionId(id: number, sessionId: string): Promise<CreditTransaction> {
-    const [updated] = await db
-      .update(creditTransactions)
-      .set({ stripeSessionId: sessionId })
-      .where(eq(creditTransactions.id, id))
-      .returning();
-    return updated;
-  }
-
-  // Subscription operations
-  async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.stripeCustomerId, customerId));
-    return user || undefined;
-  }
-
-  async updateUserSubscription(userId: number, data: {
-    stripeCustomerId?: string;
-    stripeSubscriptionId?: string;
-    subscriptionStatus?: string;
-    isPro?: boolean;
-  }): Promise<User> {
-    const updateData: any = {};
-    if (data.stripeCustomerId !== undefined) updateData.stripeCustomerId = data.stripeCustomerId;
-    if (data.stripeSubscriptionId !== undefined) updateData.stripeSubscriptionId = data.stripeSubscriptionId;
-    if (data.subscriptionStatus !== undefined) updateData.subscriptionStatus = data.subscriptionStatus;
-    if (data.isPro !== undefined) updateData.isPro = data.isPro;
-    
-    const [updated] = await db
-      .update(users)
-      .set(updateData)
-      .where(eq(users.id, userId))
-      .returning();
-    return updated;
   }
 }
 

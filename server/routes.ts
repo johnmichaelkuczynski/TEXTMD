@@ -3,7 +3,6 @@ import { setupAuth } from "./auth";
 import multer from "multer";
 import { storage } from "./storage";
 import path from "path";
-import { registerPaymentRoutes } from "./routes/payments";
 import OpenAI from "openai";
 // GPT Bypass Humanizer imports
 import { fileProcessorService } from "./services/fileProcessor";
@@ -565,9 +564,6 @@ export async function registerRoutes(app: Express): Promise<Express> {
   
   // Setup authentication
   setupAuth(app);
-  
-  // Register payment routes
-  registerPaymentRoutes(app);
   
   // API health check endpoint
   app.get("/api/check-api", async (_req: Request, res: Response) => {
