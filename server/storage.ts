@@ -50,6 +50,15 @@ export interface IStorage {
   getRewriteJob(id: number): Promise<RewriteJob | undefined>;
   updateRewriteJob(id: number, updates: Partial<RewriteJob>): Promise<RewriteJob>;
   listRewriteJobs(): Promise<RewriteJob[]>;
+  
+  // Subscription operations
+  getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
+  updateUserSubscription(userId: number, data: {
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+    subscriptionStatus?: string;
+    isPro?: boolean;
+  }): Promise<User>;
 }
 
 const MemoryStore = createMemoryStore(session);
@@ -184,6 +193,35 @@ export class DatabaseStorage implements IStorage {
       .from(rewriteJobs)
       .orderBy(eq(rewriteJobs.createdAt, rewriteJobs.createdAt)) // Simple order by
       .limit(50);
+  }
+
+  // Subscription operations
+  async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.stripeCustomerId, customerId));
+    return user || undefined;
+  }
+
+  async updateUserSubscription(userId: number, data: {
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+    subscriptionStatus?: string;
+    isPro?: boolean;
+  }): Promise<User> {
+    const updateData: any = {};
+    if (data.stripeCustomerId !== undefined) updateData.stripeCustomerId = data.stripeCustomerId;
+    if (data.stripeSubscriptionId !== undefined) updateData.stripeSubscriptionId = data.stripeSubscriptionId;
+    if (data.subscriptionStatus !== undefined) updateData.subscriptionStatus = data.subscriptionStatus;
+    if (data.isPro !== undefined) updateData.isPro = data.isPro;
+    
+    const [updated] = await db
+      .update(users)
+      .set(updateData)
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
   }
 }
 
