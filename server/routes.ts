@@ -1,6 +1,5 @@
 import { Express, Request, Response, NextFunction } from "express";
 import { setupAuth } from "./auth";
-import { registerStripeRoutes } from "./routes/stripe";
 import multer from "multer";
 import { storage } from "./storage";
 import path from "path";
@@ -565,9 +564,6 @@ export async function registerRoutes(app: Express): Promise<Express> {
   
   // Setup authentication
   setupAuth(app);
-  
-  // Setup Stripe subscription routes
-  registerStripeRoutes(app);
   
   // API health check endpoint
   app.get("/api/check-api", async (_req: Request, res: Response) => {

@@ -9,12 +9,8 @@ import TranslationPage from "@/pages/TranslationPage";
 import WebSearchPage from "@/pages/WebSearchPage";
 
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
-import BillingSuccess from "@/pages/BillingSuccess";
-import BillingCancel from "@/pages/BillingCancel";
 import NotFound from "@/pages/not-found";
-import { BrainCircuit, Languages, FileEdit, Globe, Bot, Brain, Mail, User, LogOut, Trash2, Stethoscope, Crown, Sparkles } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { apiRequest } from "./lib/queryClient";
+import { BrainCircuit, Languages, FileEdit, Globe, Bot, Brain, Mail, User, LogOut, Trash2, Stethoscope } from "lucide-react";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { useState, createContext, useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -192,27 +188,6 @@ function Navigation() {
   const { user, logoutMutation } = useAuth();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [isUpgrading, setIsUpgrading] = useState(false);
-
-  const { data: billingStatus } = useQuery<{ isPro: boolean; subscriptionStatus: string | null }>({
-    queryKey: ['/api/billing/status'],
-    enabled: !!user,
-  });
-
-  const handleUpgrade = async () => {
-    setIsUpgrading(true);
-    try {
-      const response = await apiRequest('POST', '/api/stripe/create-checkout-session');
-      const data = await response.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (error) {
-      console.error('Upgrade error:', error);
-    } finally {
-      setIsUpgrading(false);
-    }
-  };
 
   return (
     <nav className="bg-primary text-primary-foreground py-4">
@@ -245,25 +220,7 @@ function Navigation() {
             
             <div className="flex items-center gap-4 border-l border-primary-foreground/20 pl-4">
               {user ? (
-                <div className="flex items-center gap-3">
-                  {billingStatus?.isPro ? (
-                    <Badge className="bg-amber-500 hover:bg-amber-600 text-white" data-testid="badge-pro">
-                      <Crown className="h-3 w-3 mr-1" />
-                      PRO
-                    </Badge>
-                  ) : (
-                    <Button 
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleUpgrade}
-                      disabled={isUpgrading}
-                      className="bg-amber-500 hover:bg-amber-600 text-white border-0"
-                      data-testid="button-upgrade"
-                    >
-                      <Sparkles className="h-4 w-4 mr-1" />
-                      {isUpgrading ? 'Loading...' : 'Upgrade ($1/mo)'}
-                    </Button>
-                  )}
+                <div className="flex items-center gap-2">
                   <span className="text-sm">Welcome, {user.email || user.username}!</span>
                   <Button 
                     variant="ghost" 
@@ -306,8 +263,7 @@ function Router({ resetKey }: { resetKey: number }) {
       <Switch key={resetKey}>
         <Route path="/" component={HomePage} />
         <Route path="/analytics" component={AnalyticsPage} />
-        <Route path="/billing/success" component={BillingSuccess} />
-        <Route path="/billing/cancel" component={BillingCancel} />
+
         <Route component={NotFound} />
       </Switch>
     </>
