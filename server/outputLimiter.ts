@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { storage } from './storage';
 import type { GeneratedOutput } from '@shared/schema';
 
-export function truncateOutput(fullText: string): { preview: string; isTruncated: boolean } {
+export function truncateOutput(fullText: string): { preview: string; isTruncated: boolean; actualPreviewWordCount: number } {
   const words = fullText.split(/\s+/).filter(w => w.length > 0);
   const wordCount = words.length;
   
@@ -10,13 +10,13 @@ export function truncateOutput(fullText: string): { preview: string; isTruncated
   const limit = Math.min(limit65Percent, 1000);
   
   if (wordCount <= limit) {
-    return { preview: fullText, isTruncated: false };
+    return { preview: fullText, isTruncated: false, actualPreviewWordCount: wordCount };
   }
   
   const previewWords = words.slice(0, limit);
   const preview = previewWords.join(' ') + '\n\n[... Output truncated. Upgrade to Pro to unlock full content ...]';
   
-  return { preview, isTruncated: true };
+  return { preview, isTruncated: true, actualPreviewWordCount: limit };
 }
 
 export interface OutputResult {
@@ -36,10 +36,9 @@ export async function storeAndReturnOutput(
   metadata?: Record<string, any>
 ): Promise<OutputResult> {
   const outputId = uuidv4();
-  const { preview, isTruncated } = truncateOutput(fullOutput);
+  const { preview, isTruncated, actualPreviewWordCount } = truncateOutput(fullOutput);
   
   const fullWords = fullOutput.split(/\s+/).filter(w => w.length > 0);
-  const previewWords = preview.split(/\s+/).filter(w => w.length > 0);
   
   await storage.createGeneratedOutput({
     outputId,
@@ -57,7 +56,7 @@ export async function storeAndReturnOutput(
     content: isPro ? fullOutput : preview,
     isTruncated: isPro ? false : isTruncated,
     fullWordCount: fullWords.length,
-    previewWordCount: previewWords.length,
+    previewWordCount: actualPreviewWordCount,
   };
 }
 

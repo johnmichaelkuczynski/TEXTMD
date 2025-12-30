@@ -721,6 +721,22 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
   });
   
+  // Helper to ensure anonymous session exists
+  const ensureAnonSession = (req: Request, res: Response): string | null => {
+    let sessionId = req.cookies?.anon_session;
+    if (!sessionId && !req.isAuthenticated()) {
+      const { v4: uuidv4 } = require('uuid');
+      sessionId = uuidv4();
+      res.cookie('anon_session', sessionId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax',
+      });
+    }
+    return sessionId || null;
+  };
+  
   // Output management endpoints (for free-tier limiting)
   app.get("/api/output/:outputId", async (req: Request, res: Response) => {
     try {
@@ -728,7 +744,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const user = req.user as any;
       const isPro = user?.isPro || false;
       const userId = user?.id || null;
-      const sessionId = req.cookies?.anon_session || null;
+      const sessionId = ensureAnonSession(req, res);
       
       const output = await storage.getGeneratedOutput(outputId);
       if (!output) {
@@ -761,7 +777,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const user = req.user as any;
       const isPro = user?.isPro || false;
       const userId = user?.id || null;
-      const sessionId = req.cookies?.anon_session || null;
+      const sessionId = ensureAnonSession(req, res);
       
       if (!isPro) {
         return res.status(403).json({ 
