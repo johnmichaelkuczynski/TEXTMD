@@ -6,6 +6,7 @@ import {
   cognitiveProfiles, 
   intelligentRewrites,
   rewriteJobs,
+  generatedOutputs,
   type User, 
   type InsertUser, 
   type InsertDocument, 
@@ -13,7 +14,9 @@ import {
   type InsertUserActivity, 
   type InsertCognitiveProfile,
   type InsertRewriteJob,
-  type RewriteJob
+  type RewriteJob,
+  type InsertGeneratedOutput,
+  type GeneratedOutput
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -59,6 +62,13 @@ export interface IStorage {
     subscriptionStatus?: string;
     isPro?: boolean;
   }): Promise<User>;
+  
+  // Generated outputs operations (for free-tier limiting)
+  createGeneratedOutput(output: InsertGeneratedOutput): Promise<GeneratedOutput>;
+  getGeneratedOutput(outputId: string): Promise<GeneratedOutput | undefined>;
+  getGeneratedOutputsByUser(userId: number): Promise<GeneratedOutput[]>;
+  getGeneratedOutputsBySession(sessionId: string): Promise<GeneratedOutput[]>;
+  linkSessionOutputsToUser(sessionId: string, userId: number): Promise<void>;
 }
 
 const MemoryStore = createMemoryStore(session);
@@ -222,6 +232,47 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return updated;
+  }
+  
+  // Generated outputs operations (for free-tier limiting)
+  async createGeneratedOutput(output: InsertGeneratedOutput): Promise<GeneratedOutput> {
+    const [created] = await db
+      .insert(generatedOutputs)
+      .values(output)
+      .returning();
+    return created;
+  }
+  
+  async getGeneratedOutput(outputId: string): Promise<GeneratedOutput | undefined> {
+    const [output] = await db
+      .select()
+      .from(generatedOutputs)
+      .where(eq(generatedOutputs.outputId, outputId));
+    return output || undefined;
+  }
+  
+  async getGeneratedOutputsByUser(userId: number): Promise<GeneratedOutput[]> {
+    return await db
+      .select()
+      .from(generatedOutputs)
+      .where(eq(generatedOutputs.userId, userId));
+  }
+  
+  async getGeneratedOutputsBySession(sessionId: string): Promise<GeneratedOutput[]> {
+    return await db
+      .select()
+      .from(generatedOutputs)
+      .where(eq(generatedOutputs.sessionId, sessionId));
+  }
+  
+  async linkSessionOutputsToUser(sessionId: string, userId: number): Promise<void> {
+    await db
+      .update(generatedOutputs)
+      .set({ userId, sessionId: null })
+      .where(and(
+        eq(generatedOutputs.sessionId, sessionId),
+        eq(generatedOutputs.userId, null as any)
+      ));
   }
 }
 
