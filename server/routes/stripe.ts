@@ -14,10 +14,16 @@ export function registerStripeRoutes(app: Express) {
     }
 
     const userId = (req.user as any).id;
-    const userEmail = (req.user as any).email;
-
+    
     try {
-      const session = await stripe.checkout.sessions.create({
+      // Fetch fresh user data from database
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Build checkout session options
+      const sessionOptions: Stripe.Checkout.SessionCreateParams = {
         mode: "subscription",
         payment_method_types: ["card"],
         line_items: [
@@ -28,7 +34,6 @@ export function registerStripeRoutes(app: Express) {
         ],
         success_url: "https://textmd.xyz/billing/success",
         cancel_url: "https://textmd.xyz/billing/cancel",
-        customer_email: userEmail || undefined,
         metadata: {
           userId: userId.toString(),
         },
@@ -37,7 +42,16 @@ export function registerStripeRoutes(app: Express) {
             userId: userId.toString(),
           },
         },
-      });
+      };
+
+      // Reuse existing Stripe customer if available
+      if (user.stripeCustomerId) {
+        sessionOptions.customer = user.stripeCustomerId;
+      } else if (user.email) {
+        sessionOptions.customer_email = user.email;
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionOptions);
 
       res.json({ url: session.url });
     } catch (error: any) {
@@ -127,18 +141,29 @@ export function registerStripeRoutes(app: Express) {
     }
   });
 
-  // Get billing status
+  // Get billing status - always fetch fresh from database
   app.get("/api/billing/status", async (req: Request, res: Response) => {
     if (!req.isAuthenticated() || !req.user) {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    const user = req.user as any;
+    const userId = (req.user as any).id;
     
-    res.json({
-      isPro: user.isPro || false,
-      subscriptionStatus: user.subscriptionStatus || null,
-      stripeCustomerId: user.stripeCustomerId || null,
-    });
+    try {
+      // Fetch fresh user data from database to get current subscription status
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      res.json({
+        isPro: user.isPro || false,
+        subscriptionStatus: user.subscriptionStatus || null,
+        stripeCustomerId: user.stripeCustomerId || null,
+      });
+    } catch (error: any) {
+      console.error("Billing status error:", error);
+      res.status(500).json({ error: error.message });
+    }
   });
 }
