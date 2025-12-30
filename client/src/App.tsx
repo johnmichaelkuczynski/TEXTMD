@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CreditBalance } from "@/components/CreditBalance";
 
 // Reset Context
 interface ResetContextType {
@@ -234,9 +233,6 @@ function Navigation() {
           <div className="flex items-center gap-3">
             {user && (
               <>
-                <div className="bg-primary-foreground/10 px-3 py-1.5 rounded-md">
-                  <CreditBalance />
-                </div>
                 {billingStatus?.isPro ? (
                   <div className="flex items-center gap-1 bg-amber-500/20 px-2 py-1 rounded-md text-amber-200">
                     <Crown className="h-4 w-4" />
