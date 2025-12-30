@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { stripe, isStripeConfigured, CREDIT_PACKAGES, type Provider, type PriceTier, hasUnlimitedCredits } from "../lib/stripe-config";
 import { storage } from "../storage";
 import { z } from "zod";
+import Stripe from "stripe";
 
 const checkoutSchema = z.object({
   provider: z.enum(["openai", "anthropic", "perplexity", "deepseek"]),
@@ -196,6 +197,165 @@ export function registerPaymentRoutes(app: Express) {
     } catch (error: any) {
       console.error("Error fetching balance:", error);
       res.status(500).json({ message: "Error fetching credit balance" });
+    }
+  });
+
+  // ============ SUBSCRIPTION ROUTES ============
+
+  // Create Stripe Checkout Session for subscription
+  app.post("/api/stripe/create-checkout-session", async (req: Request, res: Response) => {
+    try {
+      if (!isStripeConfigured || !stripe) {
+        return res.status(503).json({ message: "Payment system not configured" });
+      }
+
+      if (!req.isAuthenticated() || !req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const priceId = process.env.STRIPE_PRICE_ID;
+      if (!priceId) {
+        return res.status(500).json({ message: "Subscription price not configured" });
+      }
+
+      // Create Stripe Checkout Session for subscription
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        mode: "subscription",
+        success_url: "https://textmd.xyz/billing/success?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url: "https://textmd.xyz/billing/cancel",
+        client_reference_id: String(req.user.id),
+        metadata: {
+          userId: String(req.user.id),
+        },
+        customer_email: req.user.email || undefined,
+      });
+
+      console.log(`✅ Subscription checkout session created for user ${req.user.id}`);
+      res.json({ sessionId: session.id, url: session.url });
+    } catch (error: any) {
+      console.error("Subscription checkout error:", error);
+      res.status(500).json({ message: "Error creating checkout session", error: error.message });
+    }
+  });
+
+  // Stripe Subscription Webhook Handler
+  app.post("/api/stripe/webhook", async (req: Request, res: Response) => {
+    if (!isStripeConfigured || !stripe) {
+      return res.status(503).send("Payment system not configured");
+    }
+
+    const sig = req.headers["stripe-signature"];
+    
+    if (!sig) {
+      return res.status(400).send("No signature");
+    }
+
+    let event: Stripe.Event;
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET!
+      );
+    } catch (err: any) {
+      console.error("Subscription webhook signature verification failed:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    console.log(`📨 Received Stripe webhook: ${event.type}`);
+
+    try {
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object as Stripe.Checkout.Session;
+          
+          // Only handle subscription mode
+          if (session.mode === "subscription") {
+            const userId = session.metadata?.userId ? parseInt(session.metadata.userId) : null;
+            const customerId = session.customer as string;
+            const subscriptionId = session.subscription as string;
+
+            if (userId) {
+              await storage.updateUserSubscription(userId, {
+                stripeCustomerId: customerId,
+                stripeSubscriptionId: subscriptionId,
+                subscriptionStatus: "active",
+                isPro: true,
+              });
+              console.log(`✅ Subscription activated for user ${userId}`);
+            }
+          }
+          break;
+        }
+
+        case "customer.subscription.updated": {
+          const subscription = event.data.object as Stripe.Subscription;
+          const customerId = subscription.customer as string;
+          const status = subscription.status;
+
+          // Find user by customer ID and update their subscription status
+          const user = await storage.getUserByStripeCustomerId(customerId);
+          if (user) {
+            const isPro = status === "active" || status === "trialing";
+            await storage.updateUserSubscription(user.id, {
+              subscriptionStatus: status,
+              isPro,
+            });
+            console.log(`📝 Subscription updated for user ${user.id}: ${status}, isPro: ${isPro}`);
+          }
+          break;
+        }
+
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object as Stripe.Subscription;
+          const customerId = subscription.customer as string;
+
+          const user = await storage.getUserByStripeCustomerId(customerId);
+          if (user) {
+            await storage.updateUserSubscription(user.id, {
+              subscriptionStatus: "canceled",
+              isPro: false,
+            });
+            console.log(`❌ Subscription canceled for user ${user.id}`);
+          }
+          break;
+        }
+      }
+    } catch (error) {
+      console.error("Error processing subscription webhook:", error);
+    }
+
+    res.json({ received: true });
+  });
+
+  // Get user billing/subscription status
+  app.get("/api/billing/status", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated() || !req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({
+        isPro: user.isPro || false,
+        subscriptionStatus: user.subscriptionStatus || null,
+        hasActiveSubscription: user.subscriptionStatus === "active" || user.subscriptionStatus === "trialing",
+      });
+    } catch (error: any) {
+      console.error("Error fetching billing status:", error);
+      res.status(500).json({ message: "Error fetching billing status" });
     }
   });
 }

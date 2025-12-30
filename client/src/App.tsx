@@ -10,9 +10,11 @@ import WebSearchPage from "@/pages/WebSearchPage";
 
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import NotFound from "@/pages/not-found";
-import { BrainCircuit, Languages, FileEdit, Globe, Bot, Brain, Mail, User, LogOut, Trash2, Stethoscope } from "lucide-react";
+import { BrainCircuit, Languages, FileEdit, Globe, Bot, Brain, Mail, User, LogOut, Trash2, Stethoscope, Sparkles, Crown } from "lucide-react";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { useState, createContext, useContext } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "./lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,6 +191,29 @@ function Navigation() {
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
+  // Fetch billing status for logged-in users
+  const { data: billingStatus } = useQuery<{ isPro: boolean; subscriptionStatus: string | null; hasActiveSubscription: boolean }>({
+    queryKey: ["/api/billing/status"],
+    enabled: !!user,
+  });
+
+  // Create checkout session mutation
+  const upgradeMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/stripe/create-checkout-session");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+  });
+
+  const handleUpgrade = () => {
+    upgradeMutation.mutate();
+  };
+
   return (
     <nav className="bg-primary text-primary-foreground py-4">
       <div className="container mx-auto flex justify-between items-center">
@@ -208,9 +233,29 @@ function Navigation() {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             {user && (
-              <div className="bg-primary-foreground/10 px-3 py-1.5 rounded-md">
-                <CreditBalance />
-              </div>
+              <>
+                <div className="bg-primary-foreground/10 px-3 py-1.5 rounded-md">
+                  <CreditBalance />
+                </div>
+                {billingStatus?.isPro ? (
+                  <div className="flex items-center gap-1 bg-amber-500/20 px-2 py-1 rounded-md text-amber-200">
+                    <Crown className="h-4 w-4" />
+                    <span className="text-xs font-medium">PRO</span>
+                  </div>
+                ) : (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={handleUpgrade}
+                    disabled={upgradeMutation.isPending}
+                    className="bg-amber-500/20 text-amber-200 hover:bg-amber-500/30"
+                    data-testid="button-upgrade"
+                  >
+                    <Sparkles className="h-4 w-4 mr-1" />
+                    {upgradeMutation.isPending ? "Loading..." : "Upgrade"}
+                  </Button>
+                )}
+              </>
             )}
             
             <Button 

@@ -68,6 +68,15 @@ export interface IStorage {
   getCreditTransactionByStripeSession(sessionId: string): Promise<CreditTransaction | undefined>;
   updateCreditTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<CreditTransaction>;
   updateCreditTransactionSessionId(id: number, sessionId: string): Promise<CreditTransaction>;
+  
+  // Subscription operations
+  getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
+  updateUserSubscription(userId: number, data: {
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+    subscriptionStatus?: string;
+    isPro?: boolean;
+  }): Promise<User>;
 }
 
 const MemoryStore = createMemoryStore(session);
@@ -306,6 +315,35 @@ export class DatabaseStorage implements IStorage {
       .update(creditTransactions)
       .set({ stripeSessionId: sessionId })
       .where(eq(creditTransactions.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Subscription operations
+  async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.stripeCustomerId, customerId));
+    return user || undefined;
+  }
+
+  async updateUserSubscription(userId: number, data: {
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+    subscriptionStatus?: string;
+    isPro?: boolean;
+  }): Promise<User> {
+    const updateData: any = {};
+    if (data.stripeCustomerId !== undefined) updateData.stripeCustomerId = data.stripeCustomerId;
+    if (data.stripeSubscriptionId !== undefined) updateData.stripeSubscriptionId = data.stripeSubscriptionId;
+    if (data.subscriptionStatus !== undefined) updateData.subscriptionStatus = data.subscriptionStatus;
+    if (data.isPro !== undefined) updateData.isPro = data.isPro;
+    
+    const [updated] = await db
+      .update(users)
+      .set(updateData)
+      .where(eq(users.id, userId))
       .returning();
     return updated;
   }
