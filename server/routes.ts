@@ -4772,23 +4772,27 @@ ${output}`;
           });
         }
         
-        // APPLY TEXT-LEVEL COHERENCE: Use Global Coherence State system to ensure
-        // coherence is maintained across the entire document
-        console.log(`[OBJECTION-PROOF] Applying text-level coherence with GCS system...`);
+        // APPLY TEXT-LEVEL COHERENCE: Use Cross-Chunk Coherence system with
+        // global skeleton extraction and constrained chunk reconstruction
+        console.log(`[OBJECTION-PROOF] Applying Cross-Chunk Coherence system...`);
         try {
-          const coherenceResult = await rewriteWithGlobalCoherence(
+          const { crossChunkReconstruct } = await import('./services/crossChunkCoherence');
+          const ccResult = await crossChunkReconstruct(
             result.output,
-            "logical-cohesiveness", // Use logical cohesiveness for argumentative texts
-            "moderate", // Moderate aggressiveness preserves content while improving coherence
-            400 // Words per chunk
+            undefined, // audienceParameters
+            undefined, // rigorLevel  
+            customInstructions || undefined // Pass through custom instructions for length targets
           );
           
-          // Use the coherence-enhanced version
-          result.output = coherenceResult.rewrittenText;
-          console.log(`[OBJECTION-PROOF] Text-level coherence applied successfully`);
-        } catch (coherenceError: any) {
-          // If coherence processing fails, continue with original output
-          console.warn(`[OBJECTION-PROOF] Coherence processing failed, using original: ${coherenceError.message}`);
+          if (ccResult.wasReconstructed && ccResult.reconstructedText) {
+            result.output = ccResult.reconstructedText;
+            console.log(`[OBJECTION-PROOF] Cross-Chunk Coherence applied: ${ccResult.changes}`);
+          } else {
+            console.log(`[OBJECTION-PROOF] CC skipped (short doc or no changes needed)`);
+          }
+        } catch (ccError: any) {
+          // If CC processing fails, continue with original output
+          console.warn(`[OBJECTION-PROOF] Cross-Chunk Coherence failed, using original: ${ccError.message}`);
         }
 
         // Build comprehensive header showing custom instructions, structure, and process
@@ -5047,21 +5051,25 @@ Provide:
         });
       }
       
-      // APPLY TEXT-LEVEL COHERENCE for shorter texts too (if wordCount >= 300)
-      if (wordCount >= 300 && output.length > 0) {
-        console.log(`[OBJECTION-PROOF] Applying text-level coherence with GCS system...`);
+      // APPLY TEXT-LEVEL COHERENCE using Cross-Chunk Coherence system
+      // Only for texts with enough content to benefit (800+ words = CC threshold)
+      const outputWordCount = output.trim().split(/\s+/).length;
+      if (outputWordCount >= 800 && output.length > 0) {
+        console.log(`[OBJECTION-PROOF] Applying Cross-Chunk Coherence system (${outputWordCount} words)...`);
         try {
-          const { rewriteWithGlobalCoherence } = await import('./services/coherenceMeter');
-          const coherenceResult = await rewriteWithGlobalCoherence(
+          const { crossChunkReconstruct } = await import('./services/crossChunkCoherence');
+          const ccResult = await crossChunkReconstruct(
             output,
-            "logical-cohesiveness",
-            "moderate",
-            400
+            undefined,
+            undefined,
+            customInstructions || undefined
           );
-          output = coherenceResult.rewrittenText;
-          console.log(`[OBJECTION-PROOF] Text-level coherence applied successfully`);
-        } catch (coherenceError: any) {
-          console.warn(`[OBJECTION-PROOF] Coherence processing failed, using original: ${coherenceError.message}`);
+          if (ccResult.wasReconstructed && ccResult.reconstructedText) {
+            output = ccResult.reconstructedText;
+            console.log(`[OBJECTION-PROOF] Cross-Chunk Coherence applied: ${ccResult.changes}`);
+          }
+        } catch (ccError: any) {
+          console.warn(`[OBJECTION-PROOF] Cross-Chunk Coherence failed, using original: ${ccError.message}`);
         }
       }
 
