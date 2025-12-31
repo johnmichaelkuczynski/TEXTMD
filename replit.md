@@ -53,7 +53,7 @@ The application employs a monorepo structure, separating client and server compo
   - `REPLIT_DEPLOYMENT` environment variable present OR
   - Hostname contains "replit"
   - **NEVER bypassed on textmd.xyz domain** (production safety)
-- **Pro Subscription**: Logged-in Pro users ($1/month via Stripe) receive full outputs
+- **Pro Status**: Logged-in Pro users receive full outputs (Pro status managed manually in database)
 - **Output Storage**: 
   - Anonymous users: Only preview stored (`outputFull = NULL`)
   - Logged-in users: Both full and preview stored
@@ -61,5 +61,5 @@ The application employs a monorepo structure, separating client and server compo
 
 ## External Dependencies
 - **AI Service Providers**: OpenAI API (GPT-4), Anthropic API (Claude), DeepSeek API, Perplexity AI, Grok API (xAI).
-- **Supporting Services**: Mathpix OCR, AssemblyAI, SendGrid, Google Custom Search, Stripe (for credit purchases), AnalyticPhilosophy.net Zhi API.
+- **Supporting Services**: Mathpix OCR, AssemblyAI, SendGrid, Google Custom Search, AnalyticPhilosophy.net Zhi API.
 - **Database & Infrastructure**: Neon/PostgreSQL, Drizzle ORM, Replit.

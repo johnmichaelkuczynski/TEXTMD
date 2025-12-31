@@ -54,15 +54,8 @@ export interface IStorage {
   updateRewriteJob(id: number, updates: Partial<RewriteJob>): Promise<RewriteJob>;
   listRewriteJobs(): Promise<RewriteJob[]>;
   
-  // Subscription operations
-  getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
-  updateUserSubscription(userId: number, data: {
-    stripeCustomerId?: string;
-    stripeSubscriptionId?: string;
-    subscriptionStatus?: string;
-    isPro?: boolean;
-    paidUntil?: Date | null;
-  }): Promise<User>;
+  // Pro status operations
+  updateUserProStatus(userId: number, isPro: boolean): Promise<User>;
   
   // Generated outputs operations (for free-tier limiting)
   createGeneratedOutput(output: InsertGeneratedOutput): Promise<GeneratedOutput>;
@@ -205,32 +198,11 @@ export class DatabaseStorage implements IStorage {
       .limit(50);
   }
 
-  // Subscription operations
-  async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.stripeCustomerId, customerId));
-    return user || undefined;
-  }
-
-  async updateUserSubscription(userId: number, data: {
-    stripeCustomerId?: string;
-    stripeSubscriptionId?: string;
-    subscriptionStatus?: string;
-    isPro?: boolean;
-    paidUntil?: Date | null;
-  }): Promise<User> {
-    const updateData: any = {};
-    if (data.stripeCustomerId !== undefined) updateData.stripeCustomerId = data.stripeCustomerId;
-    if (data.stripeSubscriptionId !== undefined) updateData.stripeSubscriptionId = data.stripeSubscriptionId;
-    if (data.subscriptionStatus !== undefined) updateData.subscriptionStatus = data.subscriptionStatus;
-    if (data.isPro !== undefined) updateData.isPro = data.isPro;
-    if (data.paidUntil !== undefined) updateData.paidUntil = data.paidUntil;
-    
+  // Pro status operations
+  async updateUserProStatus(userId: number, isPro: boolean): Promise<User> {
     const [updated] = await db
       .update(users)
-      .set(updateData)
+      .set({ isPro })
       .where(eq(users.id, userId))
       .returning();
     return updated;

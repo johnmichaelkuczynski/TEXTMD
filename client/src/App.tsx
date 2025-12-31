@@ -9,15 +9,10 @@ import TranslationPage from "@/pages/TranslationPage";
 import WebSearchPage from "@/pages/WebSearchPage";
 
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
-import BillingSuccessPage from "@/pages/BillingSuccessPage";
-import BillingCancelPage from "@/pages/BillingCancelPage";
 import NotFound from "@/pages/not-found";
-import { BrainCircuit, Languages, FileEdit, Globe, Bot, Brain, Mail, User, LogOut, Trash2, Stethoscope, Crown, Sparkles } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { Mail, User, LogOut, Trash2, Stethoscope } from "lucide-react";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { useState, createContext, useContext } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -193,23 +188,6 @@ function Navigation() {
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   
-  const { data: billingStatus } = useQuery<{ subscriptionStatus: string | null; isPro: boolean }>({
-    queryKey: ['/api/billing/status'],
-    enabled: !!user,
-  });
-  
-  const upgradeMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest('POST', '/api/stripe/create-checkout-session');
-      const data = await response.json();
-      return data;
-    },
-    onSuccess: (data) => {
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    },
-  });
 
   return (
     <nav className="bg-primary text-primary-foreground py-4">
@@ -243,24 +221,6 @@ function Navigation() {
             <div className="flex items-center gap-4 border-l border-primary-foreground/20 pl-4">
               {user ? (
                 <div className="flex items-center gap-2">
-                  {billingStatus?.isPro ? (
-                    <span className="flex items-center gap-1 bg-yellow-500 text-yellow-950 px-2 py-1 rounded-md text-xs font-bold">
-                      <Crown className="h-3 w-3" />
-                      PRO
-                    </span>
-                  ) : (
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => upgradeMutation.mutate()}
-                      disabled={upgradeMutation.isPending}
-                      className="text-primary-foreground hover:bg-primary-foreground/10"
-                      data-testid="button-upgrade"
-                    >
-                      <Sparkles className="h-4 w-4 mr-1" />
-                      {upgradeMutation.isPending ? 'Loading...' : 'Upgrade ($1/month)'}
-                    </Button>
-                  )}
                   <span className="text-sm">Welcome, {user.email || user.username}!</span>
                   <Button 
                     variant="ghost" 
@@ -303,9 +263,6 @@ function Router({ resetKey }: { resetKey: number }) {
       <Switch key={resetKey}>
         <Route path="/" component={HomePage} />
         <Route path="/analytics" component={AnalyticsPage} />
-        <Route path="/billing/success" component={BillingSuccessPage} />
-        <Route path="/billing/cancel" component={BillingCancelPage} />
-
         <Route component={NotFound} />
       </Switch>
     </>
