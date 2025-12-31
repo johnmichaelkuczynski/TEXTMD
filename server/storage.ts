@@ -68,7 +68,7 @@ export interface IStorage {
   getGeneratedOutput(outputId: string): Promise<GeneratedOutput | undefined>;
   getGeneratedOutputsByUser(userId: number): Promise<GeneratedOutput[]>;
   getGeneratedOutputsBySession(sessionId: string): Promise<GeneratedOutput[]>;
-  linkSessionOutputsToUser(sessionId: string, userId: number): Promise<void>;
+  linkSessionOutputsToUser(sessionId: string, userId: number): Promise<number>;
 }
 
 const MemoryStore = createMemoryStore(session);
@@ -265,14 +265,18 @@ export class DatabaseStorage implements IStorage {
       .where(eq(generatedOutputs.sessionId, sessionId));
   }
   
-  async linkSessionOutputsToUser(sessionId: string, userId: number): Promise<void> {
-    await db
+  async linkSessionOutputsToUser(sessionId: string, userId: number): Promise<number> {
+    // Claim outputs: UPDATE outputs SET user_id = ? WHERE user_id IS NULL AND session_id = ?
+    // Keep sessionId so retrieval works before/after login
+    const result = await db
       .update(generatedOutputs)
-      .set({ userId, sessionId: null })
+      .set({ userId })
       .where(and(
         eq(generatedOutputs.sessionId, sessionId),
         eq(generatedOutputs.userId, null as any)
-      ));
+      ))
+      .returning();
+    return result.length;
   }
 }
 

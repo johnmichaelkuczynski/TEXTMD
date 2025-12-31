@@ -277,19 +277,23 @@ export function setupAuth(app: Express) {
         failureRedirect: "/?error=google_auth_failed" 
       }),
       async (req, res) => {
-        // Link any anonymous session outputs to the newly logged-in user
+        // Claim any anonymous session outputs to the newly logged-in user
         const anonSessionId = req.cookies?.anon_session;
         const userId = (req.user as any)?.id;
         
+        console.log(`[AUTH] Google login callback - anon_session: ${anonSessionId}, userId: ${userId}`);
+        
         if (anonSessionId && userId) {
           try {
-            await storage.linkSessionOutputsToUser(anonSessionId, userId);
-            // Clear the anonymous session cookie after linking
-            res.clearCookie('anon_session');
-            console.log(`Linked anonymous session ${anonSessionId} to user ${userId}`);
+            // Claim outputs: UPDATE outputs SET user_id = ? WHERE user_id IS NULL AND session_id = ?
+            const claimedCount = await storage.linkSessionOutputsToUser(anonSessionId, userId);
+            console.log(`[AUTH] Claimed ${claimedCount} outputs from anon_session=${anonSessionId} to user_id=${userId}`);
+            // DO NOT clear the anon_session cookie - keep it for future use
           } catch (error) {
-            console.error('Failed to link session outputs:', error);
+            console.error('[AUTH] Failed to claim session outputs:', error);
           }
+        } else {
+          console.log(`[AUTH] No claiming - anonSessionId=${anonSessionId}, userId=${userId}`);
         }
         
         // Successful authentication, redirect to home

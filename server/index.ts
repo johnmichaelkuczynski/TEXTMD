@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import cookieParser from "cookie-parser";
+import { v4 as uuidv4 } from "uuid";
 
 import { setupVite, serveStatic, log } from "./vite";
 import { registerRoutes } from "./routes";
@@ -11,6 +12,24 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 app.use(cookieParser());
+
+// Middleware: Ensure anon_session cookie exists on EVERY request
+app.use((req, res, next) => {
+  if (!req.cookies?.anon_session) {
+    const anonSessionId = uuidv4();
+    res.cookie('anon_session', anonSessionId, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    });
+    // Also set on request for immediate use
+    req.cookies = req.cookies || {};
+    req.cookies.anon_session = anonSessionId;
+  }
+  next();
+});
 
 // Headers for iframe embedding (Wix compatibility)
 app.use((req, res, next) => {
