@@ -49,11 +49,14 @@ The application employs a monorepo structure, separating client and server compo
 ## Authentication & Output Access Model
 - **Anonymous Preview Mode**: All generation endpoints allow anonymous usage; outputs are truncated to 65% or minimum 1000 words
 - **DEV BYPASS**: Full outputs provided without auth/subscription in development environments:
+  - `DEV_FULL_ACCESS === 'true'` OR
   - `NODE_ENV !== 'production'` OR
   - `REPLIT_DEPLOYMENT` environment variable present OR
   - Hostname contains "replit"
   - **NEVER bypassed on textmd.xyz domain** (production safety)
-- **Pro Status**: Logged-in Pro users receive full outputs (Pro status managed manually in database)
+- **Pro Subscription**: Logged-in Pro users ($1/month via Stripe) receive full outputs
+  - `is_pro` boolean in users table is SINGLE SOURCE OF TRUTH for payment status
+  - Stripe webhook updates `is_pro` on subscription events
 - **Output Storage**: 
   - Anonymous users: Only preview stored (`outputFull = NULL`)
   - Logged-in users: Both full and preview stored
@@ -61,5 +64,5 @@ The application employs a monorepo structure, separating client and server compo
 
 ## External Dependencies
 - **AI Service Providers**: OpenAI API (GPT-4), Anthropic API (Claude), DeepSeek API, Perplexity AI, Grok API (xAI).
-- **Supporting Services**: Mathpix OCR, AssemblyAI, SendGrid, Google Custom Search, AnalyticPhilosophy.net Zhi API.
+- **Supporting Services**: Mathpix OCR, AssemblyAI, SendGrid, Google Custom Search, Stripe (payment processing), AnalyticPhilosophy.net Zhi API.
 - **Database & Infrastructure**: Neon/PostgreSQL, Drizzle ORM, Replit.

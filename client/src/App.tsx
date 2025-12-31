@@ -9,6 +9,8 @@ import TranslationPage from "@/pages/TranslationPage";
 import WebSearchPage from "@/pages/WebSearchPage";
 
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
+import BillingSuccessPage from "@/pages/BillingSuccessPage";
+import BillingCancelPage from "@/pages/BillingCancelPage";
 import NotFound from "@/pages/not-found";
 import { Mail, User, LogOut, Trash2, Stethoscope } from "lucide-react";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
@@ -263,6 +265,8 @@ function Router({ resetKey }: { resetKey: number }) {
       <Switch key={resetKey}>
         <Route path="/" component={HomePage} />
         <Route path="/analytics" component={AnalyticsPage} />
+        <Route path="/billing/success" component={BillingSuccessPage} />
+        <Route path="/billing/cancel" component={BillingCancelPage} />
         <Route component={NotFound} />
       </Switch>
     </>
