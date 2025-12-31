@@ -62,18 +62,8 @@ const HomePage: React.FC = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   
-  // Helper to check if user is logged in before generation
-  const requireAuth = (): boolean => {
-    if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in with Google to generate text. Click the profile icon in the sidebar.",
-        variant: "destructive",
-      });
-      return false;
-    }
-    return true;
-  };
+  // Anonymous users can now generate - they get truncated previews
+  // Only Pro users get full outputs (or users in dev environments via DEV BYPASS)
   
   // State for analysis mode
   const [mode, setMode] = useState<AnalysisMode>("single");
@@ -492,8 +482,6 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
   // Main humanization function with surgical precision
   const handleHumanize = async () => {
-    if (!requireAuth()) return;
-    
     if (!boxA.trim() || !boxB.trim()) {
       toast({
         title: "Missing Input",
@@ -781,8 +769,6 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
   // Text Model Validator Handler
   const handleValidatorProcess = async (mode: "reconstruction") => {
-    if (!requireAuth()) return;
-    
     if (!validatorInputText.trim()) {
       toast({
         title: "No Input Text",
@@ -1160,8 +1146,6 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
   // Objections Function Handler - generates 25 objections and counter-objections
   const handleObjections = async () => {
-    if (!requireAuth()) return;
-    
     if (!objectionsInputText.trim()) {
       toast({
         title: "No Input Provided",
@@ -2899,8 +2883,6 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
   // Handler for maximize intelligence
   const handleMaximizeIntelligence = async () => {
-    if (!requireAuth()) return;
-    
     if (!documentA.content.trim()) {
       alert("Please provide document content first.");
       return;
@@ -3018,9 +3000,6 @@ Generated on: ${new Date().toLocaleString()}`;
   };
 
   const handleAnalyze = async () => {
-    // OPTION A: Login required to generate
-    if (!requireAuth()) return;
-    
     const contentA = getContentForAnalysis(documentA);
     const contentB = getContentForAnalysis(documentB);
     
