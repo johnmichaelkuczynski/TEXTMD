@@ -4158,8 +4158,8 @@ Remember: NO markdown formatting. Use plain text with CAPS headers only.`;
         });
       }
 
-      // Call the AI model (support multiple providers, default to Grok/ZHI 5)
-      const provider = llmProvider || 'zhi5'; // Default to Grok (ZHI 5)
+      // Call the AI model (support multiple providers, default to DeepSeek/ZHI 4)
+      const provider = llmProvider || 'zhi4'; // Default to DeepSeek (ZHI 4)
       let output = '';
       
       console.log(`[Text Model Validator] Using provider: ${provider}`);
