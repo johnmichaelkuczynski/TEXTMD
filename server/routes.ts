@@ -260,7 +260,7 @@ Then provide detailed analysis organized into sections:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'grok-3',
+        model: 'grok-3-beta',
         messages: [{ role: 'user', content: prompt }],
         stream: true,
         max_tokens: 4000,
@@ -482,7 +482,7 @@ Provide detailed analysis of literary merit, character development, plot structu
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'grok-3',
+        model: 'grok-3-beta',
         messages: [{ role: 'user', content: prompt }],
         stream: true,
         max_tokens: 4000,
@@ -1810,7 +1810,7 @@ ${externalKnowledge}`;
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'grok-3',
+            model: 'grok-3-beta',
             messages: [
               { role: 'system', content: systemMessage },
               ...messages
@@ -4231,7 +4231,7 @@ Remember: NO markdown formatting. Use plain text with CAPS headers only.`;
         const data = await response.json();
         output = data.choices?.[0]?.message?.content || '';
       } else {
-        // Default: Grok (ZHI 5)
+        // Default: Grok (ZHI 5) - using grok-3-beta model
         const response = await fetch('https://api.x.ai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -4239,7 +4239,7 @@ Remember: NO markdown formatting. Use plain text with CAPS headers only.`;
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'grok-3',
+            model: 'grok-3-beta',
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
