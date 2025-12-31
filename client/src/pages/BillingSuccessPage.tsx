@@ -36,28 +36,7 @@ export default function BillingSuccessPage() {
     };
 
     const fetchOutput = async () => {
-      const lastOutputId = localStorage.getItem('last_output_id');
-      
-      if (lastOutputId) {
-        try {
-          const response = await fetch(`/api/output/${lastOutputId}`, {
-            credentials: 'include'
-          });
-          if (response.ok) {
-            const data = await response.json();
-            setRestoredOutput({
-              content: data.content,
-              outputType: data.outputType,
-              isTruncated: data.isTruncated
-            });
-            return data;
-          }
-        } catch (error) {
-          console.error('Error fetching output:', error);
-        }
-      }
-      
-      // Fallback: fetch latest output
+      // Fetch user's latest output (all outputs are linked to logged-in users)
       try {
         const latestResponse = await fetch('/api/output/latest', {
           credentials: 'include'
@@ -149,10 +128,7 @@ export default function BillingSuccessPage() {
   }, []);
 
   const handleGoHome = () => {
-    // Preserve output state in sessionStorage for HomePage to pick up
-    if (restoredOutput) {
-      sessionStorage.setItem('restored_output', JSON.stringify(restoredOutput));
-    }
+    // Navigate home - outputs are linked to user account, no need for sessionStorage
     window.location.href = '/';
   };
 

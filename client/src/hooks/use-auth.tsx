@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useRef } from "react";
+import { createContext, ReactNode, useContext } from "react";
 import {
   useQuery,
   useMutation,
@@ -21,7 +21,6 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  const hasLinkedSession = useRef(false);
   
   const {
     data: user,
@@ -31,16 +30,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
-  
-  useEffect(() => {
-    if (user && !hasLinkedSession.current) {
-      hasLinkedSession.current = true;
-      fetch('/api/outputs/link-session', {
-        method: 'POST',
-        credentials: 'include',
-      }).catch(() => {});
-    }
-  }, [user]);
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {

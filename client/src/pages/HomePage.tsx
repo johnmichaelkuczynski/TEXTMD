@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import ModeToggle from "@/components/ModeToggle";
 import DocumentInput from "@/components/DocumentInput";
 import DocumentResults from "@/components/DocumentResults";
@@ -59,6 +60,20 @@ const stripMarkdown = (text: string): string => {
 
 const HomePage: React.FC = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
+  
+  // Helper to check if user is logged in before generation
+  const requireAuth = (): boolean => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in with Google to generate text. Click the profile icon in the sidebar.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
   
   // State for analysis mode
   const [mode, setMode] = useState<AnalysisMode>("single");
@@ -367,86 +382,6 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
     loadStylePresets();
   }, []);
 
-  // Restore output on page load (after Google login, page refresh, billing success, etc.)
-  useEffect(() => {
-    const restoreOutput = async () => {
-      const savedOutputId = localStorage.getItem('last_output_id');
-      
-      // First check sessionStorage (from billing success redirect)
-      const restoredOutputStr = sessionStorage.getItem('restored_output');
-      if (restoredOutputStr) {
-        sessionStorage.removeItem('restored_output');
-        try {
-          const restored = JSON.parse(restoredOutputStr);
-          
-          // If content is truncated, always refetch from API to get latest Pro status
-          if (restored.isTruncated && savedOutputId) {
-            console.log('[Restore] Cached content is truncated, refetching from API...');
-            const response = await fetch(`/api/output/${savedOutputId}`, {
-              credentials: 'include'
-            });
-            if (response.ok) {
-              const data = await response.json();
-              if (data.content) {
-                setValidatorOutput(stripMarkdown(data.content));
-                setValidatorMode("reconstruction");
-                toast({
-                  title: "Output Restored",
-                  description: data.isTruncated 
-                    ? "Your output was restored. Your Pro upgrade may still be processing - please refresh."
-                    : "Your full, untruncated output is now available!",
-                });
-                return;
-              }
-            }
-          }
-          
-          // Use cached content if not truncated
-          if (restored.content) {
-            setValidatorOutput(stripMarkdown(restored.content));
-            setValidatorMode("reconstruction");
-            toast({
-              title: "Output Restored",
-              description: "Your full, untruncated output is now available!",
-            });
-          }
-        } catch (e) {
-          console.error('Failed to restore output from sessionStorage:', e);
-        }
-        return;
-      }
-      
-      // Check localStorage for saved output_id (survives Google login redirect)
-      if (savedOutputId) {
-        try {
-          const response = await fetch(`/api/output/${savedOutputId}`, {
-            credentials: 'include'
-          });
-          if (response.ok) {
-            const data = await response.json();
-            if (data.content) {
-              setValidatorOutput(stripMarkdown(data.content));
-              setValidatorMode("reconstruction");
-              // Only show toast if this is after a login (check if URL has no special params)
-              if (!window.location.search.includes('error')) {
-                toast({
-                  title: "Output Restored",
-                  description: data.isTruncated 
-                    ? "Your previous output was restored. Upgrade to Pro to see the full version."
-                    : "Your full output has been restored.",
-                });
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Failed to restore output from API:', e);
-        }
-      }
-    };
-    
-    restoreOutput();
-  }, [toast]);
-
   // GPT Bypass Humanizer Functions - Following Exact Protocol
   
   // Debounce function for delayed execution
@@ -557,6 +492,8 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
   // Main humanization function with surgical precision
   const handleHumanize = async () => {
+    if (!requireAuth()) return;
+    
     if (!boxA.trim() || !boxB.trim()) {
       toast({
         title: "Missing Input",
@@ -844,6 +781,8 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
   // Text Model Validator Handler
   const handleValidatorProcess = async (mode: "reconstruction") => {
+    if (!requireAuth()) return;
+    
     if (!validatorInputText.trim()) {
       toast({
         title: "No Input Text",
@@ -896,10 +835,6 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       if (data.success && data.output) {
         setValidatorOutput(stripMarkdown(data.output));
         setObjectionsInputText(stripMarkdown(data.output));
-        // Save outputId to localStorage for persistence across redirects
-        if (data.outputId) {
-          localStorage.setItem('last_output_id', data.outputId);
-        }
         toast({
           title: "Validation Complete!",
           description: `Text validated using ${mode} mode. Reconstructed text has been loaded into the Objections input.`,
@@ -961,10 +896,6 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       const data = await response.json();
       if (data.success && data.output) {
         setValidatorOutput(stripMarkdown(data.output));
-        // Save outputId to localStorage for persistence across redirects
-        if (data.outputId) {
-          localStorage.setItem('last_output_id', data.outputId);
-        }
         setRefineWordCount("");
         setRefineInstructions("");
         toast({ title: "Reconstruction refined successfully!" });
@@ -1229,6 +1160,8 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
   // Objections Function Handler - generates 25 objections and counter-objections
   const handleObjections = async () => {
+    if (!requireAuth()) return;
+    
     if (!objectionsInputText.trim()) {
       toast({
         title: "No Input Provided",
@@ -1273,10 +1206,6 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       const data = await response.json();
       if (data.success && data.output) {
         setObjectionsOutput(stripMarkdown(data.output));
-        // Save outputId to localStorage for persistence across redirects
-        if (data.outputId) {
-          localStorage.setItem('last_output_id', data.outputId);
-        }
         const methodDesc = data.method === 'outline-first' ? ' (outline-first analysis)' : '';
         toast({
           title: "Objections Generated!",
@@ -2970,6 +2899,8 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
 
   // Handler for maximize intelligence
   const handleMaximizeIntelligence = async () => {
+    if (!requireAuth()) return;
+    
     if (!documentA.content.trim()) {
       alert("Please provide document content first.");
       return;
@@ -3087,6 +3018,9 @@ Generated on: ${new Date().toLocaleString()}`;
   };
 
   const handleAnalyze = async () => {
+    // OPTION A: Login required to generate
+    if (!requireAuth()) return;
+    
     const contentA = getContentForAnalysis(documentA);
     const contentB = getContentForAnalysis(documentB);
     
