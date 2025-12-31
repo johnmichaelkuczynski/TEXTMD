@@ -4249,7 +4249,13 @@ Remember: NO markdown formatting. Use plain text with CAPS headers only.`;
           }),
         });
         const data = await response.json();
+        if (data.error) {
+          console.error(`[Grok API Error] ${data.error.message || JSON.stringify(data.error)}`);
+        }
         output = data.choices?.[0]?.message?.content || '';
+        if (!output) {
+          console.error(`[Grok API] Empty response. Full data:`, JSON.stringify(data).substring(0, 500));
+        }
       }
 
       // If literal truth mode is enabled, apply rule-based softening and verification
