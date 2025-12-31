@@ -3150,9 +3150,10 @@ Structural understanding is always understanding of relationships. Observational
   app.post("/api/text-model-validator", async (req: Request, res: Response) => {
     try {
       // OPTION A: Login required to generate
-      // Allow internal batch calls with userId passed directly
+      // Allow internal batch calls ONLY from localhost with special header
       const internalUserId = req.body._internalUserId;
-      const isInternalCall = internalUserId && req.headers['x-internal-batch'] === 'true';
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      const isInternalCall = isLocalhost && internalUserId && req.headers['x-internal-batch'] === 'true';
       
       if (!isInternalCall && (!req.isAuthenticated() || !req.user)) {
         return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
