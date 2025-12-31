@@ -42,9 +42,9 @@ export function truncateOutput(fullText: string): { preview: string; isTruncated
   const words = fullText.split(/\s+/).filter(w => w.length > 0);
   const wordCount = words.length;
   
-  // Preview is min(first 1000 words, first 65%)
+  // Preview is max(65% of content, 1000 words) - but never more than total
   const limit65Percent = Math.floor(wordCount * 0.65);
-  const limit = Math.min(limit65Percent, 1000);
+  const limit = Math.min(Math.max(limit65Percent, 1000), wordCount);
   
   if (wordCount <= limit) {
     return { preview: fullText, isTruncated: false, actualPreviewWordCount: wordCount };
