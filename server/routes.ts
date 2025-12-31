@@ -1859,16 +1859,52 @@ ${externalKnowledge}`;
     }
   });
 
-  // Case assessment endpoint - REAL-TIME STREAMING
+  // Case assessment endpoint - REAL-TIME STREAMING (Pro users only, anonymous get JSON)
   app.post("/api/case-assessment", async (req: Request, res: Response) => {
     try {
+      const devBypass = isDevBypass(req);
       const { text, provider = "zhi1", context } = req.body;
       
       if (!text || typeof text !== 'string') {
         return res.status(400).json({ error: "Text content is required for case assessment" });
       }
       
-      // Set headers for real-time streaming
+      // Determine user and pro status
+      const user = req.user as any;
+      const userId: number | null = user?.id || null;
+      const freshUser = userId ? await storage.getUser(userId) : null;
+      const isPro = freshUser?.isPro || false;
+      
+      // Non-Pro users on production: return truncated JSON instead of streaming
+      if (!devBypass && !isPro) {
+        console.log(`[Case Assessment] Non-Pro user, returning truncated JSON`);
+        const actualProvider = mapZhiToProvider(provider);
+        
+        // Perform the assessment and truncate
+        const { performCaseAssessment } = await import('./services/caseAssessment');
+        const result = await performCaseAssessment(text, actualProvider, context);
+        const resultText = typeof result === 'string' ? result : JSON.stringify(result);
+        
+        const outputResult = await storeAndReturnOutput(
+          resultText,
+          'case-assessment',
+          isPro,
+          userId,
+          devBypass,
+          { provider, context }
+        );
+        
+        return res.json({
+          success: true,
+          result: outputResult.content,
+          outputId: outputResult.outputId,
+          isTruncated: outputResult.isTruncated,
+          fullWordCount: outputResult.fullWordCount,
+          previewWordCount: outputResult.previewWordCount
+        });
+      }
+      
+      // Set headers for real-time streaming (Pro users or dev bypass only)
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
@@ -3000,19 +3036,61 @@ Structural understanding is always understanding of relationships. Observational
   });
 
   // SSE Streaming Reconstruction endpoint for long documents (>= 1000 words)
+  // Pro users get streaming, non-Pro users get truncated JSON
   app.post("/api/reconstruction/stream", async (req: Request, res: Response) => {
     try {
+      const devBypass = isDevBypass(req);
       const { text, customInstructions, audienceParameters, rigorLevel } = req.body;
       
       if (!text) {
         return res.status(400).json({ success: false, message: "Text is required" });
       }
       
+      // Determine user and pro status
+      const user = req.user as any;
+      const userId: number | null = user?.id || null;
+      const freshUser = userId ? await storage.getUser(userId) : null;
+      const isPro = freshUser?.isPro || false;
+      
       const wordCount = text.trim().split(/\s+/).length;
       if (wordCount < 1000) {
         return res.status(400).json({ 
           success: false, 
           message: `Document too short for streaming (${wordCount} words). Use standard endpoint for documents < 1000 words.`
+        });
+      }
+      
+      // Non-Pro users on production: run reconstruction but return truncated result
+      if (!devBypass && !isPro) {
+        console.log(`[SSE] Non-Pro user, running reconstruction with truncated output`);
+        
+        const result = await runFullReconstruction(
+          text,
+          customInstructions,
+          audienceParameters,
+          rigorLevel,
+          () => {} // No progress callback for non-streaming
+        );
+        
+        // Apply truncation
+        const outputResult = await storeAndReturnOutput(
+          result.reconstructedText,
+          'reconstruction-stream',
+          isPro,
+          userId,
+          devBypass,
+          { wordCount, chunksProcessed: result.chunksProcessed }
+        );
+        
+        return res.json({
+          success: true,
+          output: outputResult.content,
+          wordCount: result.wordCount,
+          chunksProcessed: result.chunksProcessed,
+          outputId: outputResult.outputId,
+          isTruncated: outputResult.isTruncated,
+          fullWordCount: outputResult.fullWordCount,
+          previewWordCount: outputResult.previewWordCount
         });
       }
       
