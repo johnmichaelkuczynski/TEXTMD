@@ -332,7 +332,8 @@ Be discriminating - use the full range from 20-95. Reserve 90+ for truly excepti
 async function generateDefenses(
   positions: RankedPosition[],
   customInstructions: string,
-  format: DefenseFormat
+  format: DefenseFormat,
+  onProgress?: (stage: string, current: number, total: number) => void
 ): Promise<PositionDefense[]> {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -348,6 +349,7 @@ async function generateDefenses(
   for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
     const batch = batches[batchIdx];
     console.log(`[POSITION-LIST] Generating defenses for batch ${batchIdx + 1}/${batches.length}`);
+    onProgress?.(`Generating defenses (batch ${batchIdx + 1}/${batches.length})`, batchIdx + 1, batches.length);
 
     const positionsText = batch.map((p, i) => 
       `POSITION ${i + 1}: "${p.claim}"`
@@ -513,8 +515,8 @@ export async function processPositionList(
     console.log(`[POSITION-LIST] Selected ${rankedPositions.length} positions`);
 
     onProgress?.('Generating defenses...', 2, 4);
-    // FIX #9: Pass format to generateDefenses
-    const defenses = await generateDefenses(rankedPositions, customInstructions, format);
+    // FIX #9: Pass format and onProgress to generateDefenses for per-batch updates
+    const defenses = await generateDefenses(rankedPositions, customInstructions, format, onProgress);
     console.log(`[POSITION-LIST] Generated ${defenses.length} defenses`);
 
     onProgress?.('Formatting output...', 3, 4);
