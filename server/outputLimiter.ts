@@ -9,32 +9,49 @@ import type { Request } from 'express';
  * NEVER returns true for textmd.xyz (production).
  */
 export function isDevBypass(req: Request): boolean {
-  // Never bypass on production domain
+  // Check all possible host headers (for proxies like Render, Cloudflare, etc.)
   const host = req.headers.host || '';
-  if (host.includes('textmd.xyz')) {
+  const xForwardedHost = req.headers['x-forwarded-host'] as string || '';
+  const origin = req.headers.origin || '';
+  const referer = req.headers.referer || '';
+  
+  // PRODUCTION CHECK: Never bypass on production domain (check all possible sources)
+  const isProduction = 
+    host.includes('textmd.xyz') || 
+    xForwardedHost.includes('textmd.xyz') ||
+    origin.includes('textmd.xyz') ||
+    referer.includes('textmd.xyz');
+  
+  if (isProduction) {
+    console.log('[DEV_BYPASS] Production detected, returning false');
     return false;
   }
   
-  // Check DEV_FULL_ACCESS environment variable first
+  // Check DEV_FULL_ACCESS environment variable
   if (process.env.DEV_FULL_ACCESS === 'true') {
+    console.log('[DEV_BYPASS] DEV_FULL_ACCESS=true, returning true');
     return true;
   }
   
   // Bypass in development mode
   if (process.env.NODE_ENV !== 'production') {
+    console.log('[DEV_BYPASS] NODE_ENV not production, returning true');
     return true;
   }
   
   // Bypass if REPLIT_DEPLOYMENT is set (Replit preview/dev deployments)
   if (process.env.REPLIT_DEPLOYMENT) {
+    console.log('[DEV_BYPASS] REPLIT_DEPLOYMENT set, returning true');
     return true;
   }
   
   // Bypass if hostname contains replit
   if (host.includes('replit')) {
+    console.log('[DEV_BYPASS] Replit host detected, returning true');
     return true;
   }
   
+  console.log('[DEV_BYPASS] No bypass conditions met, returning false');
   return false;
 }
 
