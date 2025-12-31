@@ -26,27 +26,37 @@ export function isDevBypass(req: Request): boolean {
     REPLIT_DEPLOYMENT: process.env.REPLIT_DEPLOYMENT
   }));
   
-  // PRODUCTION CHECK: Never bypass on production domain (check all possible sources)
-  const isProduction = 
+  // PRODUCTION CHECK 1: Never bypass on production domain
+  const isProductionDomain = 
     host.includes('textmd.xyz') || 
     xForwardedHost.includes('textmd.xyz') ||
     origin.includes('textmd.xyz') ||
     referer.includes('textmd.xyz');
   
-  console.log('[DEV_BYPASS] isProduction:', isProduction);
+  // PRODUCTION CHECK 2: Never bypass if NODE_ENV=production (unless DEV_FULL_ACCESS explicitly set)
+  const isProductionEnv = process.env.NODE_ENV === 'production';
   
-  if (isProduction) {
-    console.log('[DEV_BYPASS] Production detected, returning false');
+  console.log('[DEV_BYPASS] isProductionDomain:', isProductionDomain, 'isProductionEnv:', isProductionEnv);
+  
+  // If production domain detected, NEVER bypass
+  if (isProductionDomain) {
+    console.log('[DEV_BYPASS] Production domain detected, returning false');
     return false;
   }
   
-  // Check DEV_FULL_ACCESS environment variable
+  // If NODE_ENV=production AND no explicit DEV_FULL_ACCESS, NEVER bypass
+  if (isProductionEnv && process.env.DEV_FULL_ACCESS !== 'true') {
+    console.log('[DEV_BYPASS] NODE_ENV=production without DEV_FULL_ACCESS, returning false');
+    return false;
+  }
+  
+  // Check DEV_FULL_ACCESS environment variable (only matters for non-production envs now)
   if (process.env.DEV_FULL_ACCESS === 'true') {
     console.log('[DEV_BYPASS] DEV_FULL_ACCESS=true, returning true');
     return true;
   }
   
-  // Bypass in development mode
+  // Bypass in development mode (NODE_ENV not set or not 'production')
   if (process.env.NODE_ENV !== 'production') {
     console.log('[DEV_BYPASS] NODE_ENV not production, returning true');
     return true;
