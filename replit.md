@@ -46,6 +46,19 @@ The application employs a monorepo structure, separating client and server compo
     - **Global Coherence State (GCS) System**: Architectural overhaul for coherence tracking across chunks, with mode-specific state dimensions for 8 coherence types.
     - **TextStats Component with AI Detection**: Displays word/character counts and GPTZero-powered AI detection results.
 
+## Authentication & Output Access Model
+- **Anonymous Preview Mode**: All generation endpoints allow anonymous usage; outputs are truncated to 65% or minimum 1000 words
+- **DEV BYPASS**: Full outputs provided without auth/subscription in development environments:
+  - `NODE_ENV !== 'production'` OR
+  - `REPLIT_DEPLOYMENT` environment variable present OR
+  - Hostname contains "replit"
+  - **NEVER bypassed on textmd.xyz domain** (production safety)
+- **Pro Subscription**: Logged-in Pro users ($1/month via Stripe) receive full outputs
+- **Output Storage**: 
+  - Anonymous users: Only preview stored (`outputFull = NULL`)
+  - Logged-in users: Both full and preview stored
+- **No Recovery**: Anonymous outputs cannot be "unlocked" later - must sign in before generating
+
 ## External Dependencies
 - **AI Service Providers**: OpenAI API (GPT-4), Anthropic API (Claude), DeepSeek API, Perplexity AI, Grok API (xAI).
 - **Supporting Services**: Mathpix OCR, AssemblyAI, SendGrid, Google Custom Search, Stripe (for credit purchases), AnalyticPhilosophy.net Zhi API.

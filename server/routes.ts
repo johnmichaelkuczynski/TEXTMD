@@ -4,7 +4,7 @@ import multer from "multer";
 import { storage } from "./storage";
 import path from "path";
 import OpenAI from "openai";
-import { storeAndReturnOutput } from "./outputLimiter";
+import { storeAndReturnOutput, isDevBypass } from "./outputLimiter";
 import { v4 as uuidv4 } from 'uuid';
 // GPT Bypass Humanizer imports
 import { fileProcessorService } from "./services/fileProcessor";
@@ -932,13 +932,10 @@ export async function registerRoutes(app: Express): Promise<Express> {
     });
   });
 
-  // Quick analysis API endpoint with evaluation type support (LOGIN REQUIRED)
+  // Quick analysis API endpoint with evaluation type support (anonymous preview allowed)
   app.post("/api/quick-analysis", async (req: Request, res: Response) => {
     try {
-      // OPTION A: Login required to generate
-      if (!req.isAuthenticated() || !req.user) {
-        return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
-      }
+      const devBypass = isDevBypass(req);
       
       const { text, provider = 'zhi1', evaluationType = 'intelligence' } = req.body;
 
@@ -948,11 +945,12 @@ export async function registerRoutes(app: Express): Promise<Express> {
         });
       }
 
+      // Determine user and pro status
       const user = req.user as any;
-      const userId = user.id;
+      const userId: number | null = user?.id || null;
       
       // Refetch user from DB for fresh is_pro status
-      const freshUser = await storage.getUser(userId);
+      const freshUser = userId ? await storage.getUser(userId) : null;
       const isPro = freshUser?.isPro || false;
 
       // Validate evaluation type
@@ -964,7 +962,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
       }
 
       console.log(`Starting quick ${evaluationType} analysis with ${provider}...`);
-      console.log(`User: ${userId}, Pro: ${isPro}`);
+      console.log(`User: ${userId || 'anonymous'}, Pro: ${isPro}`);
       
       const { performQuickAnalysis } = await import('./services/quickAnalysis');
       const result = await performQuickAnalysis(text, provider, evaluationType);
@@ -976,6 +974,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
         'quick-analysis',
         isPro,
         userId,
+        devBypass,
         { provider, evaluationType }
       );
       
@@ -1032,13 +1031,10 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
   });
 
-  // INTELLIGENT REWRITE - Maximize intelligence scores on protocol questions (LOGIN REQUIRED)
+  // INTELLIGENT REWRITE - Maximize intelligence scores on protocol questions (anonymous preview allowed)
   app.post("/api/intelligent-rewrite", async (req: Request, res: Response) => {
     try {
-      // OPTION A: Login required to generate
-      if (!req.isAuthenticated() || !req.user) {
-        return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
-      }
+      const devBypass = isDevBypass(req);
       
       const { originalText, customInstructions, provider = 'zhi1', useExternalKnowledge = false } = req.body;
 
@@ -1048,18 +1044,19 @@ export async function registerRoutes(app: Express): Promise<Express> {
         });
       }
 
+      // Determine user and pro status
       const user = req.user as any;
-      const userId = user.id;
+      const userId: number | null = user?.id || null;
       
       // Refetch user from DB for fresh is_pro status
-      const freshUser = await storage.getUser(userId);
+      const freshUser = userId ? await storage.getUser(userId) : null;
       const isPro = freshUser?.isPro || false;
 
       console.log(`Starting intelligent rewrite with ${provider}...`);
       console.log(`Original text length: ${originalText.length} characters`);
       console.log(`Custom instructions: ${customInstructions || 'None'}`);
       console.log(`External knowledge: ${useExternalKnowledge ? 'ENABLED' : 'DISABLED'}`);
-      console.log(`User: ${userId}, Pro: ${isPro}`);
+      console.log(`User: ${userId || 'anonymous'}, Pro: ${isPro}`);
       
       const { performIntelligentRewrite } = await import('./services/intelligentRewrite');
       const fullResult = await performIntelligentRewrite({
@@ -1075,6 +1072,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
         'intelligent-rewrite',
         isPro,
         userId,
+        devBypass,
         { provider, customInstructions, useExternalKnowledge }
       );
       
@@ -1100,13 +1098,10 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
   });
 
-  // COMPREHENSIVE 4-PHASE EVALUATION using exact protocol with evaluation type support (LOGIN REQUIRED)
+  // COMPREHENSIVE 4-PHASE EVALUATION using exact protocol with evaluation type support (anonymous preview allowed)
   app.post("/api/cognitive-evaluate", async (req: Request, res: Response) => {
     try {
-      // OPTION A: Login required to generate
-      if (!req.isAuthenticated() || !req.user) {
-        return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
-      }
+      const devBypass = isDevBypass(req);
       
       const { content, provider = 'zhi1', evaluationType = 'intelligence' } = req.body;
 
@@ -1116,11 +1111,12 @@ export async function registerRoutes(app: Express): Promise<Express> {
         });
       }
 
+      // Determine user and pro status
       const user = req.user as any;
-      const userId = user.id;
+      const userId: number | null = user?.id || null;
       
       // Refetch user from DB for fresh is_pro status
-      const freshUser = await storage.getUser(userId);
+      const freshUser = userId ? await storage.getUser(userId) : null;
       const isPro = freshUser?.isPro || false;
 
       // Validate evaluation type
@@ -1135,7 +1131,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const { executeFourPhaseProtocol } = await import('./services/fourPhaseProtocol');
 
       console.log(`EXACT 4-PHASE ${evaluationType.toUpperCase()} EVALUATION: Analyzing ${content.length} characters with protocol`);
-      console.log(`User: ${userId}, Pro: ${isPro}`);
+      console.log(`User: ${userId || 'anonymous'}, Pro: ${isPro}`);
       
       const evaluation = await executeFourPhaseProtocol(
         content, 
@@ -1149,6 +1145,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
         'cognitive-evaluate',
         isPro,
         userId,
+        devBypass,
         { provider, evaluationType, overallScore: evaluation.overallScore }
       );
 
@@ -2602,21 +2599,19 @@ PROVIDE A FINAL VALIDATED SCORE OUT OF 100 IN THE FORMAT: SCORE: X/100
     }
   });
 
-  // Main rewrite endpoint - GPT Bypass Humanizer (LOGIN REQUIRED)
+  // Main rewrite endpoint - GPT Bypass Humanizer (anonymous preview allowed)
   app.post("/api/rewrite", async (req, res) => {
     try {
-      // OPTION A: Login required to generate
-      if (!req.isAuthenticated() || !req.user) {
-        return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
-      }
+      const devBypass = isDevBypass(req);
       
       const rewriteRequest: RewriteRequest = req.body;
       
+      // Determine user and pro status
       const user = req.user as any;
-      const userId = user.id;
+      const userId: number | null = user?.id || null;
       
       // Refetch user from DB for fresh is_pro status
-      const freshUser = await storage.getUser(userId);
+      const freshUser = userId ? await storage.getUser(userId) : null;
       const isPro = freshUser?.isPro || false;
       
       // Validate request
@@ -2624,7 +2619,7 @@ PROVIDE A FINAL VALIDATED SCORE OUT OF 100 IN THE FORMAT: SCORE: X/100
         return res.status(400).json({ message: "Input text and provider are required" });
       }
 
-      console.log(`Rewrite request - User: ${userId}, Pro: ${isPro}`);
+      console.log(`Rewrite request - User: ${userId || 'anonymous'}, Pro: ${isPro}`);
 
       // Analyze input text
       const inputAnalysis = await gptZeroService.analyzeText(rewriteRequest.inputText);
@@ -2667,6 +2662,7 @@ PROVIDE A FINAL VALIDATED SCORE OUT OF 100 IN THE FORMAT: SCORE: X/100
           'rewrite',
           isPro,
           userId,
+          devBypass,
           { provider: rewriteRequest.provider, jobId: rewriteJob.id }
         );
 
@@ -3146,26 +3142,24 @@ Structural understanding is always understanding of relationships. Observational
     }
   });
 
-  // Text Model Validator endpoint (LOGIN REQUIRED)
+  // Text Model Validator endpoint (anonymous preview allowed, full requires login)
   app.post("/api/text-model-validator", async (req: Request, res: Response) => {
     try {
-      // OPTION A: Login required to generate
+      const devBypass = isDevBypass(req);
+      
       // Allow internal batch calls ONLY from localhost with special header
       const internalUserId = req.body._internalUserId;
       const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
       const isInternalCall = isLocalhost && internalUserId && req.headers['x-internal-batch'] === 'true';
       
-      if (!isInternalCall && (!req.isAuthenticated() || !req.user)) {
-        return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
-      }
-      
       const { text, mode, targetDomain, fidelityLevel, mathFramework, constraintType, rigorLevel, customInstructions, truthMapping, mathTruthMapping, literalTruth, llmProvider } = req.body;
 
+      // Determine user and pro status
       const user = req.user as any;
-      const userId = isInternalCall ? internalUserId : user.id;
+      const userId: number | null = isInternalCall ? internalUserId : (user?.id || null);
       
-      // Refetch user from DB for fresh is_pro status
-      const freshUser = await storage.getUser(userId);
+      // Refetch user from DB for fresh is_pro status (only if logged in)
+      const freshUser = userId ? await storage.getUser(userId) : null;
       const isPro = freshUser?.isPro || false;
 
       if (!text || !mode) {
@@ -3176,7 +3170,7 @@ Structural understanding is always understanding of relationships. Observational
       }
 
       console.log(`Text Model Validator - Mode: ${mode}, Target Domain: ${targetDomain || 'not specified'}`);
-      console.log(`User: ${userId}, Pro: ${isPro}`);
+      console.log(`User: ${userId || 'anonymous'}, Pro: ${isPro}`);
 
       // Build the prompt based on the mode
       let systemPrompt = "";
@@ -3206,6 +3200,7 @@ Structural understanding is always understanding of relationships. Observational
               'text-model-validator',
               isPro,
               userId,
+              devBypass,
               { mode, reconstructionMethod: 'position-list' }
             );
             
@@ -3339,6 +3334,7 @@ ${'═'.repeat(60)}
               'text-model-validator',
               isPro,
               userId,
+              devBypass,
               { mode, reconstructionMethod: 'outline-first' }
             );
             
@@ -3413,6 +3409,7 @@ ${'═'.repeat(60)}
               'text-model-validator',
               isPro,
               userId,
+              devBypass,
               { mode, reconstructionMethod: 'cross-chunk' }
             );
             
@@ -4337,6 +4334,7 @@ Model: ${providerLabels[provider] || provider}`;
         'text-model-validator',
         isPro,
         userId,
+        devBypass,
         { mode, targetDomain, fidelityLevel }
       );
 
@@ -4359,14 +4357,11 @@ Model: ${providerLabels[provider] || provider}`;
     }
   });
 
-  // Text Model Validator BATCH endpoint - Run multiple modes at once
+  // Text Model Validator BATCH endpoint - Run multiple modes at once (anonymous preview allowed)
   app.post("/api/text-model-validator/batch", async (req: Request, res: Response) => {
     try {
-      // OPTION A: Login required to generate
-      if (!req.isAuthenticated() || !req.user) {
-        return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
-      }
-
+      const devBypass = isDevBypass(req);
+      
       const { text, modes, targetDomain, fidelityLevel, mathFramework, constraintType, rigorLevel, customInstructions, truthMapping, mathTruthMapping, literalTruth, llmProvider } = req.body;
 
       if (!text || !modes || !Array.isArray(modes) || modes.length === 0) {
@@ -4375,6 +4370,10 @@ Model: ${providerLabels[provider] || provider}`;
           message: "Text and modes array are required" 
         });
       }
+      
+      // Determine user and pro status
+      const user = req.user as any;
+      const userId: number | null = user?.id || null;
 
       const validModes = ["reconstruction", "isomorphism", "mathmodel", "truth-isomorphism", "math-truth-select"];
       const invalidModes = modes.filter((m: string) => !validModes.includes(m));
@@ -4385,9 +4384,7 @@ Model: ${providerLabels[provider] || provider}`;
         });
       }
 
-      const user = req.user as any;
-      const userId = user.id;
-      console.log(`[Text Model Validator Batch] Processing ${modes.length} modes for user ${userId}: ${modes.join(', ')}`);
+      console.log(`[Text Model Validator Batch] Processing ${modes.length} modes for user ${userId || 'anonymous'}: ${modes.join(', ')}`);
 
       // Process modes in parallel with concurrency limit
       const processMode = async (mode: string): Promise<{ mode: string; success: boolean; output?: string; error?: string }> => {
@@ -4454,13 +4451,16 @@ Model: ${providerLabels[provider] || provider}`;
     }
   });
 
-  // Objections Function - Generate 25 objections and counter-arguments (LOGIN REQUIRED)
+  // Objections Function - Generate 25 objections and counter-arguments (anonymous preview allowed)
   app.post("/api/text-model-validator/objections", async (req: Request, res: Response) => {
     try {
-      // OPTION A: Login required to generate
-      if (!req.isAuthenticated() || !req.user) {
-        return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
-      }
+      const devBypass = isDevBypass(req);
+      
+      // Determine user and pro status
+      const user = req.user as any;
+      const userId: number | null = user?.id || null;
+      const freshUser = userId ? await storage.getUser(userId) : null;
+      const isPro = freshUser?.isPro || false;
 
       const { 
         bottomlineOutput,
@@ -4630,13 +4630,10 @@ ${output}`;
     }
   });
 
-  // Objection-Proof Rewrite - Rewrite text to be invulnerable to identified objections (LOGIN REQUIRED)
+  // Objection-Proof Rewrite - Rewrite text to be invulnerable to identified objections (anonymous preview allowed)
   app.post("/api/objection-proof-rewrite", async (req: Request, res: Response) => {
     try {
-      // OPTION A: Login required to generate
-      if (!req.isAuthenticated() || !req.user) {
-        return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
-      }
+      const devBypass = isDevBypass(req);
 
       const { originalText, objectionsOutput, customInstructions, finalVersionOnly } = req.body;
 
@@ -4961,13 +4958,10 @@ ${output}`;
     }
   });
 
-  // Refine Output - Adjust word count and/or apply custom instructions (LOGIN REQUIRED)
+  // Refine Output - Adjust word count and/or apply custom instructions (anonymous preview allowed)
   app.post("/api/refine-output", async (req: Request, res: Response) => {
     try {
-      // OPTION A: Login required to generate
-      if (!req.isAuthenticated() || !req.user) {
-        return res.status(401).json({ error: "Authentication required to generate text. Please sign in with Google." });
-      }
+      const devBypass = isDevBypass(req);
 
       const { text, targetWordCount, customInstructions } = req.body;
 

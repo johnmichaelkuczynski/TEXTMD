@@ -1,11 +1,43 @@
 import { v4 as uuidv4 } from 'uuid';
 import { storage } from './storage';
 import type { GeneratedOutput } from '@shared/schema';
+import type { Request } from 'express';
+
+/**
+ * DEV BYPASS HELPER
+ * Returns true if we're in a development/preview environment where gating should be bypassed.
+ * NEVER returns true for textmd.xyz (production).
+ */
+export function isDevBypass(req: Request): boolean {
+  // Never bypass on production domain
+  const host = req.headers.host || '';
+  if (host.includes('textmd.xyz')) {
+    return false;
+  }
+  
+  // Bypass in development mode
+  if (process.env.NODE_ENV !== 'production') {
+    return true;
+  }
+  
+  // Bypass if REPLIT_DEPLOYMENT is set (Replit preview/dev deployments)
+  if (process.env.REPLIT_DEPLOYMENT) {
+    return true;
+  }
+  
+  // Bypass if hostname contains replit
+  if (host.includes('replit')) {
+    return true;
+  }
+  
+  return false;
+}
 
 export function truncateOutput(fullText: string): { preview: string; isTruncated: boolean; actualPreviewWordCount: number } {
   const words = fullText.split(/\s+/).filter(w => w.length > 0);
   const wordCount = words.length;
   
+  // Preview is min(first 1000 words, first 65%)
   const limit65Percent = Math.floor(wordCount * 0.65);
   const limit = Math.min(limit65Percent, 1000);
   
@@ -16,6 +48,7 @@ export function truncateOutput(fullText: string): { preview: string; isTruncated
   const previewWords = words.slice(0, limit);
   let previewText = previewWords.join(' ');
   
+  // Try to end at a paragraph or sentence boundary
   const lastParagraphBreak = previewText.lastIndexOf('\n\n');
   const lastSentenceEnd = Math.max(
     previewText.lastIndexOf('. '),
@@ -63,20 +96,81 @@ export interface OutputResult {
   isTruncated: boolean;
   fullWordCount: number;
   previewWordCount: number;
+  isAnonymous: boolean;
+  devBypass: boolean;
 }
 
+/**
+ * Store and return output with proper gating.
+ * 
+ * @param fullOutput - The full generated text
+ * @param outputType - Type of output (e.g., 'reconstruction', 'objections')
+ * @param isPro - Whether the user is a Pro subscriber
+ * @param userId - User ID (null for anonymous users)
+ * @param devBypass - Whether dev bypass is active (skip all gating)
+ * @param metadata - Optional metadata
+ */
 export async function storeAndReturnOutput(
   fullOutput: string,
   outputType: string,
   isPro: boolean,
-  userId: number,
+  userId: number | null,
+  devBypass: boolean = false,
   metadata?: Record<string, any>
 ): Promise<OutputResult> {
   const outputId = uuidv4();
   const { preview, isTruncated, actualPreviewWordCount } = truncateOutput(fullOutput);
-  
   const fullWords = fullOutput.split(/\s+/).filter(w => w.length > 0);
+  const isAnonymous = userId === null;
   
+  // DEV BYPASS: Return full output, still store for reference
+  if (devBypass) {
+    // Store full output even in dev mode (for debugging)
+    await storage.createGeneratedOutput({
+      outputId,
+      outputType,
+      outputFull: fullOutput,
+      outputPreview: preview,
+      isTruncated,
+      userId: userId,
+      metadata: metadata || null,
+    });
+    
+    return {
+      outputId,
+      content: fullOutput,
+      isTruncated: false,
+      fullWordCount: fullWords.length,
+      previewWordCount: actualPreviewWordCount,
+      isAnonymous,
+      devBypass: true,
+    };
+  }
+  
+  // ANONYMOUS USER (not logged in): Store preview only, return preview only
+  if (isAnonymous) {
+    await storage.createGeneratedOutput({
+      outputId,
+      outputType,
+      outputFull: null, // Don't store full output for anonymous users
+      outputPreview: preview,
+      isTruncated: true, // Always truncated for anonymous
+      userId: null,
+      metadata: metadata || null,
+    });
+    
+    return {
+      outputId,
+      content: preview,
+      isTruncated: true,
+      fullWordCount: fullWords.length,
+      previewWordCount: actualPreviewWordCount,
+      isAnonymous: true,
+      devBypass: false,
+    };
+  }
+  
+  // LOGGED IN USER: Store full + preview, return based on is_pro
   await storage.createGeneratedOutput({
     outputId,
     outputType,
@@ -93,24 +187,59 @@ export async function storeAndReturnOutput(
     isTruncated: isPro ? false : isTruncated,
     fullWordCount: fullWords.length,
     previewWordCount: actualPreviewWordCount,
+    isAnonymous: false,
+    devBypass: false,
   };
 }
 
+/**
+ * Get output with proper authorization.
+ * 
+ * @param outputId - The output ID to fetch
+ * @param isPro - Whether the requesting user is Pro
+ * @param userId - The requesting user's ID (null for anonymous)
+ * @param devBypass - Whether dev bypass is active
+ */
 export async function getFullOutputIfAuthorized(
   outputId: string,
   isPro: boolean,
-  userId: number
-): Promise<{ content: string; authorized: boolean; outputType: string } | null> {
+  userId: number | null,
+  devBypass: boolean = false
+): Promise<{ content: string; authorized: boolean; outputType: string; isAnonymous: boolean } | null> {
   const output = await storage.getGeneratedOutput(outputId);
   if (!output) return null;
   
+  const isAnonymous = output.userId === null;
+  
+  // DEV BYPASS: Return full content if available
+  if (devBypass) {
+    return { 
+      content: output.outputFull || output.outputPreview, 
+      authorized: true, 
+      outputType: output.outputType,
+      isAnonymous 
+    };
+  }
+  
+  // ANONYMOUS OUTPUT: Always return preview only (full is null anyway)
+  if (isAnonymous) {
+    return { 
+      content: output.outputPreview, 
+      authorized: false, 
+      outputType: output.outputType,
+      isAnonymous: true 
+    };
+  }
+  
+  // USER-OWNED OUTPUT: Check ownership
   if (output.userId !== userId) {
-    return null;
+    return null; // Not authorized to view this output
   }
   
-  if (!isPro && output.isTruncated) {
-    return { content: output.outputPreview, authorized: false, outputType: output.outputType };
+  // Return full if Pro, preview if not
+  if (isPro && output.outputFull) {
+    return { content: output.outputFull, authorized: true, outputType: output.outputType, isAnonymous: false };
   }
   
-  return { content: output.outputFull, authorized: true, outputType: output.outputType };
+  return { content: output.outputPreview, authorized: false, outputType: output.outputType, isAnonymous: false };
 }

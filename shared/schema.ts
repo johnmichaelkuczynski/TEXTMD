@@ -954,10 +954,10 @@ export const generatedOutputs = pgTable("generated_outputs", {
   id: serial("id").primaryKey(),
   outputId: text("output_id").notNull().unique(), // UUID for referencing output
   outputType: text("output_type").notNull(), // rewrite, reconstruction, objections, bulletproof, etc.
-  outputFull: text("output_full").notNull(), // Complete generated content
+  outputFull: text("output_full"), // Complete generated content (NULL for anonymous users)
   outputPreview: text("output_preview").notNull(), // Truncated preview for non-pro users
   isTruncated: boolean("is_truncated").default(false).notNull(), // Whether preview differs from full
-  userId: integer("user_id").references(() => users.id).notNull(), // Required - login required to generate
+  userId: integer("user_id").references(() => users.id), // NULL for anonymous users
   metadata: jsonb("metadata"), // Additional context (e.g., original input word count)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
