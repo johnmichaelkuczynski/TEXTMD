@@ -367,28 +367,62 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
     loadStylePresets();
   }, []);
 
-  // Restore output after billing success redirect
+  // Restore output on page load (after Google login, page refresh, billing success, etc.)
   useEffect(() => {
-    const restoredOutputStr = sessionStorage.getItem('restored_output');
-    if (restoredOutputStr) {
-      try {
-        const restored = JSON.parse(restoredOutputStr);
-        if (restored.content) {
-          setValidatorOutput(stripMarkdown(restored.content));
-          setValidatorMode("reconstruction");
-          toast({
-            title: "Output Restored",
-            description: restored.isTruncated 
-              ? "Your output was restored (still truncated - upgrade may be processing)"
-              : "Your full, untruncated output is now available!",
-          });
+    const restoreOutput = async () => {
+      // First check sessionStorage (from billing success redirect)
+      const restoredOutputStr = sessionStorage.getItem('restored_output');
+      if (restoredOutputStr) {
+        try {
+          const restored = JSON.parse(restoredOutputStr);
+          if (restored.content) {
+            setValidatorOutput(stripMarkdown(restored.content));
+            setValidatorMode("reconstruction");
+            toast({
+              title: "Output Restored",
+              description: restored.isTruncated 
+                ? "Your output was restored (still truncated - upgrade may be processing)"
+                : "Your full, untruncated output is now available!",
+            });
+          }
+        } catch (e) {
+          console.error('Failed to restore output from sessionStorage:', e);
+        } finally {
+          sessionStorage.removeItem('restored_output');
         }
-      } catch (e) {
-        console.error('Failed to restore output:', e);
-      } finally {
-        sessionStorage.removeItem('restored_output');
+        return; // Don't fetch from API if we already restored from sessionStorage
       }
-    }
+      
+      // Check localStorage for saved output_id (survives Google login redirect)
+      const savedOutputId = localStorage.getItem('last_output_id');
+      if (savedOutputId) {
+        try {
+          const response = await fetch(`/api/output/${savedOutputId}`, {
+            credentials: 'include'
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.content) {
+              setValidatorOutput(stripMarkdown(data.content));
+              setValidatorMode("reconstruction");
+              // Only show toast if this is after a login (check if URL has no special params)
+              if (!window.location.search.includes('error')) {
+                toast({
+                  title: "Output Restored",
+                  description: data.isTruncated 
+                    ? "Your previous output was restored. Upgrade to Pro to see the full version."
+                    : "Your full output has been restored.",
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to restore output from API:', e);
+        }
+      }
+    };
+    
+    restoreOutput();
   }, [toast]);
 
   // GPT Bypass Humanizer Functions - Following Exact Protocol
@@ -905,6 +939,10 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       const data = await response.json();
       if (data.success && data.output) {
         setValidatorOutput(stripMarkdown(data.output));
+        // Save outputId to localStorage for persistence across redirects
+        if (data.outputId) {
+          localStorage.setItem('last_output_id', data.outputId);
+        }
         setRefineWordCount("");
         setRefineInstructions("");
         toast({ title: "Reconstruction refined successfully!" });
@@ -1213,6 +1251,10 @@ DOES THE AUTHOR USE OTHER AUTHORS TO DEVELOP HIS IDEAS OR TO CLOAK HIS OWN LACK 
       const data = await response.json();
       if (data.success && data.output) {
         setObjectionsOutput(stripMarkdown(data.output));
+        // Save outputId to localStorage for persistence across redirects
+        if (data.outputId) {
+          localStorage.setItem('last_output_id', data.outputId);
+        }
         const methodDesc = data.method === 'outline-first' ? ' (outline-first analysis)' : '';
         toast({
           title: "Objections Generated!",
