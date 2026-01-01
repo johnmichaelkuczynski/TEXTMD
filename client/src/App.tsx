@@ -12,7 +12,8 @@ import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import BillingSuccessPage from "@/pages/BillingSuccessPage";
 import BillingCancelPage from "@/pages/BillingCancelPage";
 import NotFound from "@/pages/not-found";
-import { Mail, User, LogOut, Trash2, Stethoscope } from "lucide-react";
+import { Mail, User, LogOut, Trash2 } from "lucide-react";
+import { FaStethoscope } from "react-icons/fa";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { useState, createContext, useContext } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -197,7 +198,7 @@ function Navigation() {
         <div className="flex items-center gap-6">
           <div className="flex flex-col items-center">
             <div className="font-bold text-xl">TEXT MD</div>
-            <Stethoscope className="h-4 w-4" />
+            <FaStethoscope className="h-5 w-5" />
           </div>
           <a 
             href="mailto:contact@zhisystems.ai" 

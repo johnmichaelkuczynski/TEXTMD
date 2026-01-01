@@ -31,25 +31,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Headers for iframe embedding (Wix compatibility)
-app.use((req, res, next) => {
-  // Allow the app to be embedded in iframes from any origin
-  res.removeHeader('X-Frame-Options');
-  
-  // Set CORS headers to allow embedding
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-    return;
-  }
-  
-  next();
-});
-
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
